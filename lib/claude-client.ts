@@ -4,24 +4,23 @@ import { CustomerInfo, ContractorInfo, JobDetails, LineItem } from '@/types';
 
 // Initialize Anthropic client lazily to ensure env var is available
 function getAnthropicClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  let apiKey = process.env.ANTHROPIC_API_KEY;
   
   if (!apiKey) {
     console.error('[claude-client] No API key found in environment');
     throw new Error('ANTHROPIC_API_KEY environment variable is not set');
   }
   
+  // CRITICAL FIX: Remove any whitespace/newlines from the API key
+  apiKey = apiKey.trim();
+  
   console.log('[claude-client] Creating Anthropic client with key length:', apiKey.length);
+  console.log('[claude-client] Key starts with:', apiKey.substring(0, 20));
+  console.log('[claude-client] Key ends with:', apiKey.substring(apiKey.length - 10));
   
   // Create a new client each time to ensure fresh configuration
   return new Anthropic({
     apiKey: apiKey,
-    // Add explicit headers for Vercel Edge Runtime
-    defaultHeaders: {
-      'X-Api-Key': apiKey,
-    },
-    // Ensure we're using the right base URL
-    baseURL: 'https://api.anthropic.com',
   });
 }
 
