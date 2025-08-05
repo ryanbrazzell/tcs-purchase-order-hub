@@ -32,7 +32,7 @@ export default function Home() {
           statusText: response.statusText,
           data
         });
-        throw new Error(data.errors?.[0] || data.error || 'Failed to extract PDF');
+        throw new Error(data.errors?.[0] || 'Failed to extract PDF');
       }
 
       setExtractionResult(data);
