@@ -2,10 +2,20 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ExtractionError, NetworkError, retryWithBackoff } from './errors';
 import { CustomerInfo, ContractorInfo, JobDetails, LineItem } from '@/types';
 
-// Initialize Anthropic client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+// Initialize Anthropic client lazily to ensure env var is available
+let anthropic: Anthropic | null = null;
+
+function getAnthropicClient(): Anthropic {
+  if (!anthropic) {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+    }
+    anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
+  }
+  return anthropic;
+}
 
 export interface ExtractionRequest {
   text: string;
@@ -25,8 +35,9 @@ export interface ExtractionResponse {
 
 export async function extractDataWithClaude(request: ExtractionRequest): Promise<ExtractionResponse> {
   try {
+    const client = getAnthropicClient();
     const response = await retryWithBackoff(async () => {
-      return await anthropic.messages.create({
+      return await client.messages.create({
         model: 'claude-3-opus-20240229',
         max_tokens: 2000,
         temperature: 0,
