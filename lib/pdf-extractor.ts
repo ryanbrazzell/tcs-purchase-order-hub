@@ -1,4 +1,3 @@
-import pdf from 'pdf-parse';
 import { ExtractionError } from './errors';
 
 export interface PDFExtractionResult {
@@ -9,12 +8,15 @@ export interface PDFExtractionResult {
 
 export async function extractTextFromPDF(file: File): Promise<PDFExtractionResult> {
   try {
+    // Dynamic import to avoid build issues
+    const pdf = await import('pdf-parse');
+    
     // Convert File to ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
     // Parse PDF
-    const data = await pdf(buffer);
+    const data = await pdf.default(buffer);
     
     if (!data.text || data.text.trim().length === 0) {
       throw new ExtractionError('No text content found in PDF');

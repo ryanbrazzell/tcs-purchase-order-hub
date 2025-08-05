@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,13 +12,7 @@ export function LineItemsTable() {
   const { currentPO, updatePO } = usePurchaseOrderStore();
   const [lineItems, setLineItems] = useState<LineItem[]>(currentPO.lineItems || []);
 
-  // Update store when line items change
-  useEffect(() => {
-    updatePO({ lineItems });
-    calculateTotals();
-  }, [lineItems]);
-
-  const calculateTotals = () => {
+  const calculateTotals = useCallback(() => {
     const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
     const tax = subtotal * TAX_RATE;
     const total = subtotal + tax;
@@ -28,7 +22,13 @@ export function LineItemsTable() {
       tax,
       total
     });
-  };
+  }, [lineItems, updatePO]);
+
+  // Update store when line items change
+  useEffect(() => {
+    updatePO({ lineItems });
+    calculateTotals();
+  }, [lineItems, updatePO, calculateTotals]);
 
   const addLineItem = () => {
     const newItem: LineItem = {
@@ -85,7 +85,7 @@ export function LineItemsTable() {
 
         {lineItems.length === 0 ? (
           <div className="text-center py-8 text-tcs-gray-500">
-            No line items added yet. Click "Add Item" to get started.
+            No line items added yet. Click &quot;Add Item&quot; to get started.
           </div>
         ) : (
           <div className="overflow-x-auto">
