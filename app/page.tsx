@@ -1,113 +1,163 @@
-import Image from "next/image";
+'use client';
+
+import { useState } from 'react';
+import { PDFUpload } from '@/components/pdf-upload';
+import { ExtractionPreview } from '@/components/extraction-preview';
+import { PurchaseOrderForm } from '@/components/purchase-order-form';
+import { ExtractPDFResponse } from '@/types';
+import toast from 'react-hot-toast';
 
 export default function Home() {
+  const [step, setStep] = useState<'upload' | 'preview' | 'form'>('upload');
+  const [isLoading, setIsLoading] = useState(false);
+  const [extractionResult, setExtractionResult] = useState<ExtractPDFResponse | null>(null);
+
+  const handleFileSelect = async (file: File) => {
+    setIsLoading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/extract-pdf', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data: ExtractPDFResponse = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.errors?.[0] || 'Failed to extract PDF');
+      }
+
+      setExtractionResult(data);
+      setStep('preview');
+      toast.success('PDF extracted successfully!');
+    } catch (error) {
+      console.error('Extraction error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to extract PDF');
+      // Allow user to proceed with manual entry
+      setStep('form');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConfirmExtraction = () => {
+    setStep('form');
+  };
+
+  const handleEditExtraction = () => {
+    setStep('form');
+  };
+
+  const handleStartOver = () => {
+    setStep('upload');
+    setExtractionResult(null);
+  };
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.tsx</code>
+    <div className="max-w-7xl mx-auto">
+      {/* Page Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-tcs-gray-900 mb-2">
+          Create Purchase Order
+        </h1>
+        <p className="text-tcs-gray-600">
+          Upload a customer proposal to automatically extract information, or start with a blank form.
         </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+      </div>
+
+      {/* Step Indicator */}
+      <div className="mb-8">
+        <div className="flex items-center">
+          <div className={`flex items-center ${step !== 'upload' ? 'text-tcs-blue-600' : 'text-tcs-gray-900'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium ${
+              step !== 'upload' ? 'bg-tcs-blue-600 text-white' : 'bg-tcs-gray-200'
+            }`}>
+              1
+            </div>
+            <span className="ml-2 text-sm font-medium">Upload PDF</span>
+          </div>
+          
+          <div className="mx-4 flex-1 h-px bg-tcs-gray-200" />
+          
+          <div className={`flex items-center ${step === 'form' ? 'text-tcs-blue-600' : step === 'preview' ? 'text-tcs-gray-900' : 'text-tcs-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium ${
+              step === 'form' ? 'bg-tcs-blue-600 text-white' : step === 'preview' ? 'bg-tcs-gray-200' : 'bg-tcs-gray-100'
+            }`}>
+              2
+            </div>
+            <span className="ml-2 text-sm font-medium">Review Extraction</span>
+          </div>
+          
+          <div className="mx-4 flex-1 h-px bg-tcs-gray-200" />
+          
+          <div className={`flex items-center ${step === 'form' ? 'text-tcs-blue-600' : 'text-tcs-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium ${
+              step === 'form' ? 'bg-tcs-blue-600 text-white' : 'bg-tcs-gray-100'
+            }`}>
+              3
+            </div>
+            <span className="ml-2 text-sm font-medium">Complete Form</span>
+          </div>
         </div>
       </div>
 
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
+      {/* Main Content */}
+      <div className="bg-white rounded-lg shadow-sm">
+        {step === 'upload' && (
+          <div className="p-8">
+            <PDFUpload 
+              onFileSelect={handleFileSelect}
+              isLoading={isLoading}
+              className="mb-6"
+            />
+            
+            <div className="text-center">
+              <p className="text-sm text-tcs-gray-600 mb-4">or</p>
+              <button
+                onClick={() => setStep('form')}
+                className="text-tcs-blue-600 hover:text-tcs-blue-700 font-medium"
+              >
+                Start with a blank form →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'preview' && extractionResult && (
+          <div className="p-8">
+            <ExtractionPreview
+              documentType={extractionResult.documentType!}
+              confidence={0.85} // You might want to add this to the API response
+              extractedData={extractionResult.extractedData!}
+              onConfirm={handleConfirmExtraction}
+              onEdit={handleEditExtraction}
+            />
+          </div>
+        )}
+
+        {step === 'form' && (
+          <div className="p-8">
+            <div className="mb-6 flex justify-between items-center">
+              <h2 className="text-2xl font-semibold text-tcs-gray-900">
+                Purchase Order Details
+              </h2>
+              <button
+                onClick={handleStartOver}
+                className="text-sm text-tcs-gray-600 hover:text-tcs-gray-900"
+              >
+                ← Start Over
+              </button>
+            </div>
+            
+            <PurchaseOrderForm
+              initialData={extractionResult?.extractedData as any}
+            />
+          </div>
+        )}
       </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+    </div>
   );
 }
