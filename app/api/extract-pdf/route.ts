@@ -59,6 +59,13 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('PDF extraction error:', error);
+    console.error('Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      hasApiKey: !!process.env.ANTHROPIC_API_KEY,
+      apiKeyLength: process.env.ANTHROPIC_API_KEY?.length
+    });
     return handleAPIError(error);
   }
 }

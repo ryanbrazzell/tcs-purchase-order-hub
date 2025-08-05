@@ -27,7 +27,12 @@ export default function Home() {
       const data: ExtractPDFResponse = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.errors?.[0] || 'Failed to extract PDF');
+        console.error('Extraction failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          data
+        });
+        throw new Error(data.errors?.[0] || data.error || 'Failed to extract PDF');
       }
 
       setExtractionResult(data);
