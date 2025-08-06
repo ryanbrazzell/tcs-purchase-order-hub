@@ -5,6 +5,7 @@ import { PDFUpload } from '@/components/pdf-upload';
 import { ExtractionPreview } from '@/components/extraction-preview';
 import { PurchaseOrderForm } from '@/components/purchase-order-form';
 import { ExtractPDFResponse } from '@/types';
+import { extractPDFInBrowser } from '@/lib/pdf-client-extractor';
 import toast from 'react-hot-toast';
 
 export default function Home() {
@@ -16,28 +17,66 @@ export default function Home() {
     setIsLoading(true);
     
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/extract-pdf', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data: ExtractPDFResponse = await response.json();
-
-      if (!response.ok || !data.success) {
-        console.error('Extraction failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          data
-        });
-        throw new Error(data.errors?.[0] || 'Failed to extract PDF');
+      // First, try client-side extraction
+      console.log('Attempting client-side PDF extraction...');
+      let extractedText = '';
+      
+      try {
+        const clientExtraction = await extractPDFInBrowser(file);
+        extractedText = clientExtraction.text;
+        console.log('Client-side extraction successful, text length:', extractedText.length);
+      } catch (clientError) {
+        console.error('Client-side extraction failed:', clientError);
+        toast.error('Could not read PDF in browser, trying server...');
       }
+      
+      // If we have text, send it to the API for Claude processing
+      if (extractedText && extractedText.length > 50) {
+        const response = await fetch('/api/extract-pdf', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: extractedText,
+            fileName: file.name
+          }),
+        });
 
-      setExtractionResult(data);
-      setStep('preview');
-      toast.success('PDF extracted successfully!');
+        const data: ExtractPDFResponse = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.errors?.[0] || 'Failed to process PDF text');
+        }
+
+        setExtractionResult(data);
+        setStep('preview');
+        toast.success('PDF extracted successfully!');
+      } else {
+        // Fallback to original server-side extraction
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/extract-pdf', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data: ExtractPDFResponse = await response.json();
+
+        if (!response.ok || !data.success) {
+          console.error('Server extraction failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            data
+          });
+          throw new Error(data.errors?.[0] || 'Failed to extract PDF');
+        }
+
+        setExtractionResult(data);
+        setStep('preview');
+        toast.success('PDF extracted successfully!');
+      }
     } catch (error) {
       console.error('Extraction error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to extract PDF');

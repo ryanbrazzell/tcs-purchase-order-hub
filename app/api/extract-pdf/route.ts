@@ -12,7 +12,57 @@ export async function POST(request: NextRequest) {
   });
 
   try {
-    // Parse form data
+    const contentType = request.headers.get('content-type') || '';
+    
+    // Handle JSON body (text already extracted client-side)
+    if (contentType.includes('application/json')) {
+      const { text, fileName } = await request.json();
+      
+      console.log('[extract-pdf] Received pre-extracted text:', {
+        fileName,
+        textLength: text?.length || 0
+      });
+      
+      if (!text || text.length < 50) {
+        return NextResponse.json(
+          { success: false, errors: ['No text content provided'] },
+          { status: 400 }
+        );
+      }
+      
+      // Send directly to Claude
+      console.log('[extract-pdf] Calling Claude API with extracted text...');
+      let extractionResult;
+      try {
+        extractionResult = await extractDataWithClaude({ text });
+        console.log('[extract-pdf] Claude extraction successful');
+      } catch (claudeError: any) {
+        console.error('[extract-pdf] Claude API error:', claudeError);
+        
+        let errorMessage = 'Failed to process extracted text';
+        if (claudeError.message?.includes('ANTHROPIC_API_KEY')) {
+          errorMessage = 'API key configuration error. Please contact support.';
+        } else if (claudeError.status === 401) {
+          errorMessage = 'Invalid API key. Please contact support.';
+        }
+        
+        return NextResponse.json(
+          { success: false, errors: [errorMessage] },
+          { status: 500 }
+        );
+      }
+      
+      const response: ExtractPDFResponse = {
+        success: true,
+        documentType: extractionResult.documentType,
+        extractedData: extractionResult.extractedData,
+        errors: []
+      };
+      
+      return NextResponse.json(response);
+    }
+    
+    // Original FormData handling
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
