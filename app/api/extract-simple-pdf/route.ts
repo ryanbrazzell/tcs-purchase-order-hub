@@ -107,7 +107,13 @@ async function extractWithAI(text: string): Promise<any> {
       description: '',
       additionalNotes: ''
     },
-    lineItems: []
+    lineItems: [] as Array<{
+      description: string;
+      quantity: number;
+      unit: string;
+      unitPrice: number;
+      total: number;
+    }>
   };
   
   if (!text || text.length < 50) {
