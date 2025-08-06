@@ -34,18 +34,10 @@ export async function extractTextFromPDF(file: File): Promise<PDFExtractionResul
       throw new ExtractionError('File is not a valid PDF (missing PDF signature)');
     }
     
-    // Parse PDF with error handling and options
+    // Parse PDF with error handling
     let data;
     try {
-      // Add options to handle various PDF formats
-      const options = {
-        // Disable normalization which can cause issues
-        normalizeWhitespace: false,
-        // Try to handle more PDF types
-        disableCombineTextItems: false,
-      };
-      
-      data = await pdf.default(buffer, options);
+      data = await pdf.default(buffer);
       console.log('[pdf-extractor] PDF parsed successfully');
     } catch (parseError: any) {
       console.error('[pdf-extractor] pdf-parse failed:', {
@@ -55,24 +47,20 @@ export async function extractTextFromPDF(file: File): Promise<PDFExtractionResul
         stack: parseError.stack
       });
       
-      // Try without options as fallback
-      try {
-        console.log('[pdf-extractor] Retrying without options...');
-        data = await pdf.default(buffer);
-      } catch (retryError: any) {
-        console.error('[pdf-extractor] Retry also failed:', retryError.message);
-        
-        // Check if it's a specific error we can handle
-        if (parseError.message?.includes('Invalid PDF structure')) {
-          throw new ExtractionError('The PDF file appears to be corrupted or has an invalid structure');
-        }
-        
-        if (parseError.message?.includes('spawn') || parseError.message?.includes('ENOENT')) {
-          throw new ExtractionError('PDF processing failed. The file may be too complex or use unsupported features.');
-        }
-        
-        throw new ExtractionError(`PDF parsing failed: ${parseError.message}`);
+      // Check if it's a specific error we can handle
+      if (parseError.message?.includes('Invalid PDF structure')) {
+        throw new ExtractionError('The PDF file appears to be corrupted or has an invalid structure');
       }
+      
+      if (parseError.message?.includes('spawn') || parseError.message?.includes('ENOENT')) {
+        throw new ExtractionError('PDF processing failed. The file may be too complex or use unsupported features.');
+      }
+      
+      if (parseError.message?.includes('Can\'t find end of central directory')) {
+        throw new ExtractionError('The file appears to be corrupted or is not a valid PDF');
+      }
+      
+      throw new ExtractionError(`PDF parsing failed: ${parseError.message}`);
     }
     
     if (!data) {
