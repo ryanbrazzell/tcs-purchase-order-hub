@@ -1,5 +1,4 @@
 import { ExtractionError } from './errors';
-import { extractTextFromPDFSimple } from './pdf-extractor-simple';
 
 export interface PDFExtractionResult {
   text: string;
@@ -10,16 +9,6 @@ export interface PDFExtractionResult {
 export async function extractTextFromPDF(file: File): Promise<PDFExtractionResult> {
   console.log('[pdf-extractor] Starting extraction for file:', file.name, 'size:', file.size);
   
-  // For Vercel/Edge runtime, try simple extraction first
-  if (typeof window === 'undefined') {
-    try {
-      console.log('[pdf-extractor] Using simple extraction for edge runtime...');
-      return await extractTextFromPDFSimple(file);
-    } catch (simpleError) {
-      console.error('[pdf-extractor] Simple extraction failed:', simpleError);
-      // Fall through to pdf-parse
-    }
-  }
   
   try {
     // Dynamic import to avoid build issues
