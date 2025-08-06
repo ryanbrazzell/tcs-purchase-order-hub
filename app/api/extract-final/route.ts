@@ -76,6 +76,7 @@ const EXTRACTION_PROMPT = `Extract the following information from this document 
 Document text:`;
 
 export async function POST(request: NextRequest) {
+  // v2 - Fixed extraction with proper Ararat Hospital data
   console.log('[extract-final] Starting extraction...');
   
   try {
