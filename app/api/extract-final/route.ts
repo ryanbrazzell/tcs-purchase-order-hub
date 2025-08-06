@@ -36,47 +36,47 @@ async function extractPDFText(buffer: Buffer): Promise<string> {
 
 const SYSTEM_PROMPT = `You are a data extraction specialist. Extract information from the provided text and return it in the exact JSON format requested. If a field cannot be found, use an empty string for text fields or 0 for numeric fields.`;
 
-const EXTRACTION_PROMPT = `Extract the following information from this document and return ONLY valid JSON:
+const EXTRACTION_PROMPT = `Extract purchase order or proposal information from this document. Look for customer details, job specifications, pricing, and line items. Return ONLY valid JSON in this exact format:
 
 {
   "customer": {
-    "companyName": "company/hospital/facility name",
-    "contactName": "contact person name",
-    "email": "email address",
-    "phone": "phone number",
-    "jobLocation": "full address/location",
-    "onsiteContactName": "onsite contact name",
-    "onsiteContactPhone": "onsite contact phone"
+    "companyName": "[extract company/facility name or empty string]",
+    "contactName": "[extract contact person or empty string]",
+    "email": "[extract email or empty string]",
+    "phone": "[extract phone or empty string]",
+    "jobLocation": "[extract address/location or empty string]",
+    "onsiteContactName": "[extract onsite contact or empty string]",
+    "onsiteContactPhone": "[extract onsite phone or empty string]"
   },
   "contractor": {
     "companyName": "TCS Floors",
-    "technicianName": "Jennifer Suzanne",
-    "email": "jennifer@tcsfloors.com",
-    "phone": "941-223-7294"
+    "technicianName": "[extract technician or use 'TBD']",
+    "email": "[extract contractor email or use 'info@tcsfloors.com']",
+    "phone": "[extract contractor phone or use '941-223-7294']"
   },
   "job": {
-    "poNumber": "PO-[6 random digits]",
-    "requestedServiceDate": "[date in YYYY-MM-DD format]",
-    "squareFootage": [number],
-    "floorType": "floor type (VCT, LVT, etc)",
-    "description": "job/service description",
-    "additionalNotes": "any additional notes"
+    "poNumber": "PO-[generate 6 random digits]",
+    "requestedServiceDate": "[extract date in YYYY-MM-DD or use today + 7 days]",
+    "squareFootage": [extract square footage as number or 0],
+    "floorType": "[extract floor type or empty string]",
+    "description": "[extract service description or empty string]",
+    "additionalNotes": "[extract any notes or empty string]"
   },
   "lineItems": [
     {
-      "description": "service/item description",
-      "quantity": [number],
-      "unit": "unit type",
-      "unitPrice": [price],
-      "total": [total amount]
+      "description": "[extract item/service description]",
+      "quantity": [extract quantity as number],
+      "unit": "[extract unit type like 'sq ft', 'each', etc]",
+      "unitPrice": [extract unit price as number],
+      "total": [extract or calculate total as number]
     }
   ]
 }
 
-Document text:`;
+Extract all relevant information from this document text:`;
 
 export async function POST(request: NextRequest) {
-  // v2 - Fixed extraction with proper Ararat Hospital data
+  // Generic PDF extraction - works with any customer PDF
   console.log('[extract-final] Starting extraction...');
   
   try {
@@ -162,29 +162,12 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Check for Ararat Hospital and override with known data
-    if (file.name.toLowerCase().includes('ararat') || extractedText.toLowerCase().includes('ararat')) {
-      console.log('[extract-final] Detected Ararat Hospital');
-      extractedData.customer = {
-        companyName: "Ararat Convalescent Hospital",
-        contactName: "Administrator",
-        email: "admin@ararathospital.com",
-        phone: "(323) 256-8012",
-        jobLocation: "2373 Colorado Blvd, Eagle Rock, CA 90041",
-        onsiteContactName: "Facility Manager",
-        onsiteContactPhone: "(323) 256-8012"
-      };
-      extractedData.job.squareFootage = 8604;
-      extractedData.job.floorType = "VCT";
-      extractedData.job.description = "Floor stripping and waxing service";
-      extractedData.lineItems = [{
-        description: "VCT Floor Stripping & Waxing",
-        quantity: 8604,
-        unit: "sq ft",
-        unitPrice: 1.10,
-        total: 9464.40
-      }];
-    }
+    // Log extraction summary
+    console.log('[extract-final] Extraction complete:', {
+      hasCustomerData: !!extractedData.customer.companyName,
+      hasJobData: !!extractedData.job.description,
+      lineItemCount: extractedData.lineItems.length
+    });
     
     return NextResponse.json({
       success: true,
