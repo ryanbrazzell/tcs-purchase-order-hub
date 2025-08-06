@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { extractTextSimple } from '@/lib/pdf-simple';
+import { extractPDFTextEdge } from '@/lib/pdf-parser-edge';
 
 const SYSTEM_PROMPT = `You are a data extraction specialist. Extract information from the provided text and return it in the exact JSON format requested. If a field cannot be found, use an empty string for text fields or 0 for numeric fields.`;
 
@@ -46,6 +47,7 @@ Extract all relevant information from this document text:`;
 export async function POST(request: NextRequest) {
   // Generic PDF extraction - works with any customer PDF
   console.log('[extract-final] Starting extraction...');
+  console.log('[extract-final] Headers:', Object.fromEntries(request.headers.entries()));
   
   try {
     const formData = await request.formData();
@@ -64,10 +66,31 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    // Extract text using our simple method
-    const extractedText = await extractTextSimple(buffer);
-    console.log('[extract-final] Extracted text length:', extractedText.length);
+    // Try multiple extraction methods
+    let extractedText = '';
+    
+    // Method 1: Try our edge-compatible parser
+    try {
+      extractedText = await extractPDFTextEdge(buffer);
+      console.log('[extract-final] Edge extraction length:', extractedText.length);
+    } catch (e) {
+      console.log('[extract-final] Edge extraction failed:', e);
+    }
+    
+    // Method 2: Fallback to simple extraction
+    if (!extractedText || extractedText.length < 100) {
+      extractedText = await extractTextSimple(buffer);
+      console.log('[extract-final] Simple extraction length:', extractedText.length);
+    }
+    
+    console.log('[extract-final] Final extracted text length:', extractedText.length);
     console.log('[extract-final] First 500 chars:', extractedText.substring(0, 500));
+    
+    // Debug: Check if we found any meaningful text
+    const hasCompanyInfo = extractedText.toLowerCase().includes('convalescent') || 
+                          extractedText.toLowerCase().includes('hospital') ||
+                          extractedText.toLowerCase().includes('ararat');
+    console.log('[extract-final] Has company info in text:', hasCompanyInfo);
     
     // Default data structure
     let extractedData = {
@@ -117,12 +140,16 @@ export async function POST(request: NextRequest) {
         
         const content = message.content[0];
         if (content.type === 'text') {
+          console.log('[extract-final] Claude response:', content.text.substring(0, 500));
           // Extract JSON from response
           const jsonMatch = content.text.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
+            console.log('[extract-final] Parsed data from Claude:', parsed);
             extractedData = { ...extractedData, ...parsed };
             console.log('[extract-final] Claude extraction successful');
+          } else {
+            console.log('[extract-final] No JSON found in Claude response');
           }
         }
       } catch (error) {

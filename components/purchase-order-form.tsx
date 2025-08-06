@@ -50,6 +50,7 @@ export function PurchaseOrderForm({ initialData, onSubmit }: PurchaseOrderFormPr
 
   // Initialize with provided data
   useEffect(() => {
+    console.log('[PurchaseOrderForm] useEffect triggered, initialData:', initialData);
     if (initialData) {
       
       // Merge the initial data with current PO
@@ -62,9 +63,13 @@ export function PurchaseOrderForm({ initialData, onSubmit }: PurchaseOrderFormPr
         lineItems: initialData.lineItems || currentPO.lineItems
       };
       
+      console.log('[PurchaseOrderForm] Merged data:', mergedData);
+      
       // Update both the store and the form
       setPO(mergedData);
       reset(mergedData);
+      
+      console.log('[PurchaseOrderForm] Form reset with merged data');
     }
   }, [initialData, setPO, reset, currentPO]);
 

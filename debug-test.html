@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TCS PO Hub Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test - PDF Upload</h1>
+    <input type="file" id="fileInput" accept="application/pdf">
+    <pre id="output"></pre>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message, data = null) {
+            const timestamp = new Date().toISOString();
+            const logEntry = `[${timestamp}] ${message}`;
+            console.log(logEntry, data);
+            output.textContent += logEntry + (data ? '\n' + JSON.stringify(data, null, 2) : '') + '\n\n';
+        }
+        
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            log('File selected:', { name: file.name, size: file.size, type: file.type });
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                log('Sending request to /api/extract-final...');
+                const response = await fetch('/api/extract-final', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                log('Response received:', { 
+                    status: response.status, 
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
+                });
+                
+                const data = await response.json();
+                log('Response data:', data);
+                
+                if (data.success && data.extractedData) {
+                    log('Extracted customer data:', data.extractedData.customer);
+                    log('Extracted job data:', data.extractedData.job);
+                    log('Line items count:', data.extractedData.lineItems?.length || 0);
+                }
+                
+            } catch (error) {
+                log('ERROR:', { message: error.message, stack: error.stack });
+            }
+        });
+    </script>
+</body>
+</html>

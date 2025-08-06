@@ -33,6 +33,8 @@ export default function Home() {
       setLoadingStage('processing');
 
       const data: ExtractPDFResponse = await response.json();
+      
+      console.log('[Home] Extraction response:', data);
 
       if (!response.ok || !data.success) {
         console.error('Extraction failed:', {
@@ -42,6 +44,8 @@ export default function Home() {
         });
         throw new Error(data.errors?.[0] || 'Failed to extract PDF');
       }
+      
+      console.log('[Home] Setting extractionResult:', data);
       
       // Final stage
       setLoadingStage('complete');
@@ -68,6 +72,7 @@ export default function Home() {
   };
 
   const handleEditExtraction = () => {
+    console.log('[Home] Edit clicked, current extractionResult:', extractionResult);
     setStep('form');
   };
 
