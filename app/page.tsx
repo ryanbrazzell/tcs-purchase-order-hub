@@ -43,6 +43,8 @@ export default function Home() {
         throw new Error(data.errors?.[0] || 'Failed to extract PDF');
       }
       
+      console.log('Extraction successful:', data);
+      
       // Final stage
       setLoadingStage('complete');
       

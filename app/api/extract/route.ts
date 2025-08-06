@@ -105,7 +105,12 @@ Text: ${pdfText.slice(0, 3000)}`
                 return NextResponse.json({
                   success: true,
                   documentType: extractedData.documentType || 'proposal',
-                  extractedData: extractedData,
+                  extractedData: {
+                    customer: extractedData.customer,
+                    contractor: extractedData.contractor,
+                    job: extractedData.job,
+                    lineItems: extractedData.lineItems
+                  },
                   errors: []
                 });
               }
