@@ -6,6 +6,7 @@ import { ExtractionPreview } from '@/components/extraction-preview';
 import { TextPreview } from '@/components/text-preview';
 import { PurchaseOrderForm } from '@/components/purchase-order-form';
 import { ExtractPDFResponse } from '@/types';
+import { convertPDFToImages } from '@/lib/pdf-to-images';
 import toast from 'react-hot-toast';
 
 export default function Home() {
@@ -20,24 +21,30 @@ export default function Home() {
     setLoadingStage('uploading');
     
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Convert PDF to images in the browser
+      console.log('Converting PDF to images...');
+      setLoadingStage('extracting');
+      const images = await convertPDFToImages(file);
+      console.log(`Converted ${images.length} pages to images`);
       
-      // Update stage after upload starts
-      setTimeout(() => setLoadingStage('extracting'), 500);
+      // Update stage after conversion
+      setLoadingStage('processing');
 
       // Add timeout to prevent hanging
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
+      // Send images to OpenAI
       const response = await fetch('/api/extract-text-only', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ images }),
         signal: controller.signal,
       }).finally(() => clearTimeout(timeoutId));
       
-      // Update stage when processing with AI
-      setLoadingStage('processing');
+      // Already set to processing above
 
       const data = await response.json();
 
