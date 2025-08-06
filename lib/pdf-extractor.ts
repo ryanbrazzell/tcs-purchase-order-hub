@@ -1,5 +1,4 @@
 import { ExtractionError } from './errors';
-import { extractTextFromPDFWithPdfJs } from './pdf-extractor-pdfjs';
 
 export interface PDFExtractionResult {
   text: string;
@@ -8,94 +7,124 @@ export interface PDFExtractionResult {
 }
 
 export async function extractTextFromPDF(file: File): Promise<PDFExtractionResult> {
-  console.log('[pdf-extractor] Starting extraction for file:', file.name);
+  console.log('[pdf-extractor] Starting extraction for file:', file.name, 'size:', file.size);
   
-  // Try pdf.js first as it's more reliable in serverless environments
   try {
-    console.log('[pdf-extractor] Attempting extraction with PDF.js...');
-    return await extractTextFromPDFWithPdfJs(file);
-  } catch (pdfjsError) {
-    console.error('[pdf-extractor] PDF.js extraction failed:', pdfjsError);
+    // Dynamic import to avoid build issues
+    const pdf = await import('pdf-parse');
+    console.log('[pdf-extractor] pdf-parse module loaded');
     
-    // Fallback to pdf-parse
+    // Convert File to ArrayBuffer
+    const arrayBuffer = await file.arrayBuffer();
+    console.log('[pdf-extractor] ArrayBuffer created, size:', arrayBuffer.byteLength);
+    
+    const buffer = Buffer.from(arrayBuffer);
+    console.log('[pdf-extractor] Buffer created, size:', buffer.length);
+    
+    // Check buffer is not empty
+    if (buffer.length === 0) {
+      throw new ExtractionError('PDF file is empty');
+    }
+    
+    // Check PDF signature
+    const pdfSignature = buffer.toString('ascii', 0, 5);
+    console.log('[pdf-extractor] PDF signature:', pdfSignature);
+    
+    if (!pdfSignature.includes('%PDF')) {
+      throw new ExtractionError('File is not a valid PDF (missing PDF signature)');
+    }
+    
+    // Parse PDF with error handling and options
+    let data;
     try {
-      console.log('[pdf-extractor] Falling back to pdf-parse...');
+      // Add options to handle various PDF formats
+      const options = {
+        // Disable normalization which can cause issues
+        normalizeWhitespace: false,
+        // Try to handle more PDF types
+        disableCombineTextItems: false,
+      };
       
-      // Dynamic import to avoid build issues
-      const pdf = await import('pdf-parse');
-      console.log('[pdf-extractor] pdf-parse module loaded');
+      data = await pdf.default(buffer, options);
+      console.log('[pdf-extractor] PDF parsed successfully');
+    } catch (parseError: any) {
+      console.error('[pdf-extractor] pdf-parse failed:', {
+        error: parseError.message,
+        name: parseError.name,
+        code: parseError.code,
+        stack: parseError.stack
+      });
       
-      // Convert File to ArrayBuffer
-      const arrayBuffer = await file.arrayBuffer();
-      console.log('[pdf-extractor] ArrayBuffer created, size:', arrayBuffer.byteLength);
-      
-      const buffer = Buffer.from(arrayBuffer);
-      console.log('[pdf-extractor] Buffer created, size:', buffer.length);
-      
-      // Parse PDF with error handling
-      let data;
+      // Try without options as fallback
       try {
+        console.log('[pdf-extractor] Retrying without options...');
         data = await pdf.default(buffer);
-        console.log('[pdf-extractor] PDF parsed successfully');
-      } catch (parseError: any) {
-        console.error('[pdf-extractor] pdf-parse failed:', {
-          error: parseError.message,
-          name: parseError.name,
-          code: parseError.code,
-          stack: parseError.stack
-        });
+      } catch (retryError: any) {
+        console.error('[pdf-extractor] Retry also failed:', retryError.message);
         
         // Check if it's a specific error we can handle
         if (parseError.message?.includes('Invalid PDF structure')) {
           throw new ExtractionError('The PDF file appears to be corrupted or has an invalid structure');
         }
         
-        throw parseError;
-      }
-      
-      if (!data) {
-        throw new ExtractionError('PDF parsing returned no data');
-      }
-      
-      console.log('[pdf-extractor] Extraction result:', {
-        hasText: !!data.text,
-        textLength: data.text?.length || 0,
-        numPages: data.numpages
-      });
-      
-      if (!data.text || data.text.trim().length === 0) {
-        throw new ExtractionError('No text content found in PDF. The PDF may be image-based or encrypted.');
-      }
-      
-      return {
-        text: data.text,
-        numPages: data.numpages,
-        info: data.info
-      };
-    } catch (error) {
-      if (error instanceof ExtractionError) {
-        throw error;
-      }
-      
-      console.error('[pdf-extractor] Both extraction methods failed');
-      console.error('[pdf-extractor] pdf-parse error:', {
-        error: error,
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
-      });
-      
-      // Provide more specific error messages
-      if (error instanceof Error) {
-        if (error.message.includes('spawn') || error.message.includes('ENOENT')) {
-          throw new ExtractionError('PDF processing tools are not available on the server');
+        if (parseError.message?.includes('spawn') || parseError.message?.includes('ENOENT')) {
+          throw new ExtractionError('PDF processing failed. The file may be too complex or use unsupported features.');
         }
-        if (error.message.includes('Invalid')) {
-          throw new ExtractionError('Invalid PDF file format');
-        }
+        
+        throw new ExtractionError(`PDF parsing failed: ${parseError.message}`);
       }
-      
-      throw new ExtractionError('Failed to extract text from PDF. Please ensure the file is a valid PDF.');
     }
+    
+    if (!data) {
+      throw new ExtractionError('PDF parsing returned no data');
+    }
+    
+    console.log('[pdf-extractor] Extraction result:', {
+      hasText: !!data.text,
+      textLength: data.text?.length || 0,
+      numPages: data.numpages,
+      info: data.info
+    });
+    
+    // Log first 200 chars of extracted text for debugging
+    if (data.text) {
+      console.log('[pdf-extractor] First 200 chars:', data.text.substring(0, 200));
+    }
+    
+    if (!data.text || data.text.trim().length === 0) {
+      throw new ExtractionError('No text content found in PDF. The PDF may be image-based or encrypted.');
+    }
+    
+    return {
+      text: data.text,
+      numPages: data.numpages,
+      info: data.info
+    };
+  } catch (error) {
+    if (error instanceof ExtractionError) {
+      throw error;
+    }
+    
+    console.error('[pdf-extractor] Unexpected error:', {
+      error: error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      if (error.message.includes('spawn') || error.message.includes('ENOENT')) {
+        throw new ExtractionError('PDF processing tools are not available on the server. Please try a simpler PDF.');
+      }
+      if (error.message.includes('Invalid')) {
+        throw new ExtractionError('Invalid PDF file format');
+      }
+      if (error.message.includes('encrypted')) {
+        throw new ExtractionError('PDF is password protected or encrypted');
+      }
+    }
+    
+    throw new ExtractionError('Failed to extract text from PDF. Please ensure the file is a valid, unencrypted PDF.');
   }
 }
 
