@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test PDF Upload</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .upload-btn {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .upload-btn:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .loading {
+            background: #cce5ff;
+            color: #004085;
+            border: 1px solid #b8daff;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test PDF Upload - Mock API</h1>
+    
+    <div class="upload-area">
+        <p>Click to select a PDF file or drag and drop</p>
+        <input type="file" id="fileInput" accept=".pdf">
+        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+            Choose PDF File
+        </button>
+    </div>
+    
+    <div id="status"></div>
+    
+    <h2>Response:</h2>
+    <pre id="response">No response yet</pre>
+    
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const statusDiv = document.getElementById('status');
+        const responseDiv = document.getElementById('response');
+        
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Show file info
+            statusDiv.innerHTML = `
+                <div class="loading">
+                    <strong>Uploading:</strong> ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+            `;
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('pdf', file);
+            
+            try {
+                // Send to mock API
+                const response = await fetch('/api/extract-mock', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    statusDiv.innerHTML = '<div class="success"><strong>Success!</strong> Mock data returned</div>';
+                    responseDiv.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    statusDiv.innerHTML = `<div class="error"><strong>Error:</strong> ${data.error || 'Unknown error'}</div>`;
+                    responseDiv.textContent = JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error"><strong>Network Error:</strong> ${error.message}</div>`;
+                responseDiv.textContent = error.stack;
+            }
+        });
+        
+        // Test GET endpoint on load
+        fetch('/api/extract-mock')
+            .then(res => res.json())
+            .then(data => {
+                console.log('GET endpoint test:', data);
+            })
+            .catch(err => {
+                console.error('GET endpoint error:', err);
+            });
+    </script>
+</body>
+</html>

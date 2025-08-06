@@ -19,12 +19,12 @@ export default function Home() {
     
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('pdf', file);
       
       // Update stage after upload starts
       setTimeout(() => setLoadingStage('extracting'), 500);
 
-      const response = await fetch('/api/extract-pdf', {
+      const response = await fetch('/api/extract-simple', {
         method: 'POST',
         body: formData,
       });
