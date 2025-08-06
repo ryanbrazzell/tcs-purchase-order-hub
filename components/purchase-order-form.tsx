@@ -21,18 +21,17 @@ interface PurchaseOrderFormProps {
 export function PurchaseOrderForm({ initialData, onSubmit }: PurchaseOrderFormProps) {
   const { currentPO, setPO, updatePO, saveDraft, startAutoSave, stopAutoSave } = usePurchaseOrderStore();
   const { calculateTotals } = useCalculatedTotals();
-  
-  console.log('[PurchaseOrderForm] Initial data received:', initialData);
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors, isSubmitting }
   } = useForm<PurchaseOrder>({
     resolver: zodResolver(PurchaseOrderSchema),
-    defaultValues: initialData || currentPO
+    defaultValues: currentPO
   });
 
   // Start auto-save when component mounts
@@ -52,12 +51,22 @@ export function PurchaseOrderForm({ initialData, onSubmit }: PurchaseOrderFormPr
   // Initialize with provided data
   useEffect(() => {
     if (initialData) {
-      setPO({ ...currentPO, ...initialData });
-      Object.entries(initialData).forEach(([key, value]) => {
-        setValue(key as any, value);
-      });
+      
+      // Merge the initial data with current PO
+      const mergedData = {
+        ...currentPO,
+        ...initialData,
+        customer: { ...currentPO.customer, ...initialData.customer },
+        contractor: { ...currentPO.contractor, ...initialData.contractor },
+        job: { ...currentPO.job, ...initialData.job },
+        lineItems: initialData.lineItems || currentPO.lineItems
+      };
+      
+      // Update both the store and the form
+      setPO(mergedData);
+      reset(mergedData);
     }
-  }, [initialData, setPO, setValue, currentPO]);
+  }, [initialData, setPO, reset]);
 
   const onFormSubmit = async (data: PurchaseOrder) => {
     try {
