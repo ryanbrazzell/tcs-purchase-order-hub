@@ -1,4 +1,5 @@
 import { ExtractionError } from './errors';
+import { extractTextFromPDFWithPdfJs } from './pdf-extractor-pdfjs';
 
 export interface PDFExtractionResult {
   text: string;
@@ -7,33 +8,94 @@ export interface PDFExtractionResult {
 }
 
 export async function extractTextFromPDF(file: File): Promise<PDFExtractionResult> {
+  console.log('[pdf-extractor] Starting extraction for file:', file.name);
+  
+  // Try pdf.js first as it's more reliable in serverless environments
   try {
-    // Dynamic import to avoid build issues
-    const pdf = await import('pdf-parse');
+    console.log('[pdf-extractor] Attempting extraction with PDF.js...');
+    return await extractTextFromPDFWithPdfJs(file);
+  } catch (pdfjsError) {
+    console.error('[pdf-extractor] PDF.js extraction failed:', pdfjsError);
     
-    // Convert File to ArrayBuffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    // Parse PDF
-    const data = await pdf.default(buffer);
-    
-    if (!data.text || data.text.trim().length === 0) {
-      throw new ExtractionError('No text content found in PDF');
+    // Fallback to pdf-parse
+    try {
+      console.log('[pdf-extractor] Falling back to pdf-parse...');
+      
+      // Dynamic import to avoid build issues
+      const pdf = await import('pdf-parse');
+      console.log('[pdf-extractor] pdf-parse module loaded');
+      
+      // Convert File to ArrayBuffer
+      const arrayBuffer = await file.arrayBuffer();
+      console.log('[pdf-extractor] ArrayBuffer created, size:', arrayBuffer.byteLength);
+      
+      const buffer = Buffer.from(arrayBuffer);
+      console.log('[pdf-extractor] Buffer created, size:', buffer.length);
+      
+      // Parse PDF with error handling
+      let data;
+      try {
+        data = await pdf.default(buffer);
+        console.log('[pdf-extractor] PDF parsed successfully');
+      } catch (parseError: any) {
+        console.error('[pdf-extractor] pdf-parse failed:', {
+          error: parseError.message,
+          name: parseError.name,
+          code: parseError.code,
+          stack: parseError.stack
+        });
+        
+        // Check if it's a specific error we can handle
+        if (parseError.message?.includes('Invalid PDF structure')) {
+          throw new ExtractionError('The PDF file appears to be corrupted or has an invalid structure');
+        }
+        
+        throw parseError;
+      }
+      
+      if (!data) {
+        throw new ExtractionError('PDF parsing returned no data');
+      }
+      
+      console.log('[pdf-extractor] Extraction result:', {
+        hasText: !!data.text,
+        textLength: data.text?.length || 0,
+        numPages: data.numpages
+      });
+      
+      if (!data.text || data.text.trim().length === 0) {
+        throw new ExtractionError('No text content found in PDF. The PDF may be image-based or encrypted.');
+      }
+      
+      return {
+        text: data.text,
+        numPages: data.numpages,
+        info: data.info
+      };
+    } catch (error) {
+      if (error instanceof ExtractionError) {
+        throw error;
+      }
+      
+      console.error('[pdf-extractor] Both extraction methods failed');
+      console.error('[pdf-extractor] pdf-parse error:', {
+        error: error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('spawn') || error.message.includes('ENOENT')) {
+          throw new ExtractionError('PDF processing tools are not available on the server');
+        }
+        if (error.message.includes('Invalid')) {
+          throw new ExtractionError('Invalid PDF file format');
+        }
+      }
+      
+      throw new ExtractionError('Failed to extract text from PDF. Please ensure the file is a valid PDF.');
     }
-    
-    return {
-      text: data.text,
-      numPages: data.numpages,
-      info: data.info
-    };
-  } catch (error) {
-    if (error instanceof ExtractionError) {
-      throw error;
-    }
-    
-    console.error('PDF extraction error:', error);
-    throw new ExtractionError('Failed to extract text from PDF');
   }
 }
 
