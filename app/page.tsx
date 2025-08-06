@@ -24,7 +24,7 @@ export default function Home() {
       // Update stage after upload starts
       setTimeout(() => setLoadingStage('extracting'), 500);
 
-      const response = await fetch('/api/extract', {
+      const response = await fetch('/api/extract-v2', {
         method: 'POST',
         body: formData,
       });
@@ -42,8 +42,6 @@ export default function Home() {
         });
         throw new Error(data.errors?.[0] || 'Failed to extract PDF');
       }
-      
-      console.log('Extraction successful:', data);
       
       // Final stage
       setLoadingStage('complete');

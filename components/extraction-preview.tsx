@@ -26,7 +26,6 @@ export function ExtractionPreview({
   onEdit,
   className
 }: ExtractionPreviewProps) {
-  console.log('ExtractionPreview received data:', extractedData);
   const getConfidenceColor = () => {
     if (confidence >= 0.9) return 'text-green-600 bg-green-50';
     if (confidence >= 0.7) return 'text-yellow-600 bg-yellow-50';
