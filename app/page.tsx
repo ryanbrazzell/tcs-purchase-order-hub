@@ -3,14 +3,16 @@
 import { useState } from 'react';
 import { PDFUpload } from '@/components/pdf-upload';
 import { ExtractionPreview } from '@/components/extraction-preview';
+import { TextPreview } from '@/components/text-preview';
 import { PurchaseOrderForm } from '@/components/purchase-order-form';
 import { ExtractPDFResponse } from '@/types';
 import toast from 'react-hot-toast';
 
 export default function Home() {
-  const [step, setStep] = useState<'upload' | 'preview' | 'form'>('upload');
+  const [step, setStep] = useState<'upload' | 'text' | 'preview' | 'form'>('upload');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState<'uploading' | 'extracting' | 'processing' | 'complete'>('uploading');
+  const [extractedText, setExtractedText] = useState<string>('');
   const [extractionResult, setExtractionResult] = useState<ExtractPDFResponse | null>(null);
 
   const handleFileSelect = async (file: File) => {
@@ -28,7 +30,7 @@ export default function Home() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
-      const response = await fetch('/api/extract-vision', {
+      const response = await fetch('/api/extract-text-only', {
         method: 'POST',
         body: formData,
         signal: controller.signal,
@@ -37,7 +39,7 @@ export default function Home() {
       // Update stage when processing with AI
       setLoadingStage('processing');
 
-      const data: ExtractPDFResponse = await response.json();
+      const data = await response.json();
 
       if (!response.ok || !data.success) {
         console.error('Extraction failed:', {
@@ -54,9 +56,9 @@ export default function Home() {
       // Small delay to show completion
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      setExtractionResult(data);
-      setStep('preview');
-      toast.success('PDF extracted successfully!');
+      setExtractedText(data.extractedText);
+      setStep('text');
+      toast.success('Text extracted successfully!');
     } catch (error) {
       console.error('Extraction error:', error);
       
@@ -88,7 +90,38 @@ export default function Home() {
 
   const handleStartOver = () => {
     setStep('upload');
+    setExtractedText('');
     setExtractionResult(null);
+  };
+
+  const handleTextContinue = async () => {
+    setIsLoading(true);
+    try {
+      // Now structure the text
+      const response = await fetch('/api/structure-text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text: extractedText })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok || !data.success) {
+        throw new Error(data.errors?.[0] || 'Failed to structure text');
+      }
+
+      setExtractionResult(data);
+      setStep('preview');
+      toast.success('Data structured successfully!');
+    } catch (error) {
+      console.error('Structure error:', error);
+      toast.error('Failed to structure text. Proceeding to manual entry.');
+      setStep('form');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -117,13 +150,24 @@ export default function Home() {
           
           <div className="mx-4 flex-1 h-px bg-tcs-gray-200" />
           
+          <div className={`flex items-center ${['text', 'preview', 'form'].includes(step) ? 'text-tcs-blue-600' : 'text-tcs-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium ${
+              ['text', 'preview', 'form'].includes(step) ? 'bg-tcs-blue-600 text-white' : 'bg-tcs-gray-100'
+            }`}>
+              2
+            </div>
+            <span className="ml-2 text-sm font-medium">View Text</span>
+          </div>
+          
+          <div className="mx-4 flex-1 h-px bg-tcs-gray-200" />
+          
           <div className={`flex items-center ${step === 'form' ? 'text-tcs-blue-600' : step === 'preview' ? 'text-tcs-gray-900' : 'text-tcs-gray-400'}`}>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium ${
               step === 'form' ? 'bg-tcs-blue-600 text-white' : step === 'preview' ? 'bg-tcs-gray-200' : 'bg-tcs-gray-100'
             }`}>
-              2
+              3
             </div>
-            <span className="ml-2 text-sm font-medium">Review Extraction</span>
+            <span className="ml-2 text-sm font-medium">Review Data</span>
           </div>
           
           <div className="mx-4 flex-1 h-px bg-tcs-gray-200" />
@@ -132,7 +176,7 @@ export default function Home() {
             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium ${
               step === 'form' ? 'bg-tcs-blue-600 text-white' : 'bg-tcs-gray-100'
             }`}>
-              3
+              4
             </div>
             <span className="ml-2 text-sm font-medium">Complete Form</span>
           </div>
@@ -159,6 +203,17 @@ export default function Home() {
                 Start with a blank form →
               </button>
             </div>
+          </div>
+        )}
+
+        {step === 'text' && (
+          <div className="p-8">
+            <TextPreview
+              extractedText={extractedText}
+              characterCount={extractedText.length}
+              onContinue={handleTextContinue}
+              onBack={handleStartOver}
+            />
           </div>
         )}
 
