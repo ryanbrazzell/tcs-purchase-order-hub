@@ -24,17 +24,20 @@ export default function Home() {
       // Update stage after upload starts
       setTimeout(() => setLoadingStage('extracting'), 500);
 
-      const response = await fetch('/api/extract-final', {
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      const response = await fetch('/api/extract-fast', {
         method: 'POST',
         body: formData,
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
       
       // Update stage when processing with AI
       setLoadingStage('processing');
 
       const data: ExtractPDFResponse = await response.json();
-      
-      console.log('[Home] Extraction response:', data);
 
       if (!response.ok || !data.success) {
         console.error('Extraction failed:', {
@@ -44,8 +47,6 @@ export default function Home() {
         });
         throw new Error(data.errors?.[0] || 'Failed to extract PDF');
       }
-      
-      console.log('[Home] Setting extractionResult:', data);
       
       // Final stage
       setLoadingStage('complete');
@@ -58,7 +59,17 @@ export default function Home() {
       toast.success('PDF extracted successfully!');
     } catch (error) {
       console.error('Extraction error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to extract PDF');
+      
+      let errorMessage = 'Failed to extract PDF';
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'Request timed out. Please try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast.error(errorMessage);
       // Allow user to proceed with manual entry
       setStep('form');
     } finally {
@@ -72,7 +83,6 @@ export default function Home() {
   };
 
   const handleEditExtraction = () => {
-    console.log('[Home] Edit clicked, current extractionResult:', extractionResult);
     setStep('form');
   };
 

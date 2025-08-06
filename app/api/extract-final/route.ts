@@ -127,7 +127,12 @@ export async function POST(request: NextRequest) {
         console.log('[extract-final] Calling Claude API...');
         const anthropic = new Anthropic({ apiKey });
         
-        const message = await anthropic.messages.create({
+        // Add timeout for Claude API call
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Claude API timeout')), 15000)
+        );
+        
+        const messagePromise = anthropic.messages.create({
           model: 'claude-3-haiku-20240307',
           max_tokens: 2000,
           temperature: 0,
@@ -137,6 +142,8 @@ export async function POST(request: NextRequest) {
             content: `${EXTRACTION_PROMPT}\n\n${extractedText.substring(0, 5000)}`
           }]
         });
+        
+        const message = await Promise.race([messagePromise, timeoutPromise]) as any;
         
         const content = message.content[0];
         if (content.type === 'text') {
