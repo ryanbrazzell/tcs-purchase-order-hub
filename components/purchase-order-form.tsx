@@ -21,6 +21,8 @@ interface PurchaseOrderFormProps {
 export function PurchaseOrderForm({ initialData, onSubmit }: PurchaseOrderFormProps) {
   const { currentPO, setPO, updatePO, saveDraft, startAutoSave, stopAutoSave } = usePurchaseOrderStore();
   const { calculateTotals } = useCalculatedTotals();
+  
+  console.log('[PurchaseOrderForm] Initial data received:', initialData);
 
   const {
     register,

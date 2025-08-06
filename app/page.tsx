@@ -24,7 +24,7 @@ export default function Home() {
       // Update stage after upload starts
       setTimeout(() => setLoadingStage('extracting'), 500);
 
-      const response = await fetch('/api/extract-v2', {
+      const response = await fetch('/api/extract-final', {
         method: 'POST',
         body: formData,
       });
