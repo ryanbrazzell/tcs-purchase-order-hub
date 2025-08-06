@@ -5,15 +5,17 @@ import { Upload, FileText, X, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { MAX_FILE_SIZE, ALLOWED_FILE_TYPES } from '@/types';
 import { FileError, handleError } from '@/lib/errors';
+import { LoadingProgress } from './loading-progress';
 import toast from 'react-hot-toast';
 
 interface PDFUploadProps {
   onFileSelect: (file: File) => void;
   isLoading?: boolean;
+  loadingStage?: 'uploading' | 'extracting' | 'processing' | 'complete';
   className?: string;
 }
 
-export function PDFUpload({ onFileSelect, isLoading = false, className }: PDFUploadProps) {
+export function PDFUpload({ onFileSelect, isLoading = false, loadingStage = 'uploading', className }: PDFUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -147,12 +149,7 @@ export function PDFUpload({ onFileSelect, isLoading = false, className }: PDFUpl
           </div>
           
           {isLoading && (
-            <div className="mt-4">
-              <div className="bg-tcs-blue-100 rounded-full h-2 overflow-hidden">
-                <div className="bg-tcs-blue-600 h-full rounded-full animate-pulse" style={{ width: '60%' }} />
-              </div>
-              <p className="text-sm text-tcs-gray-600 mt-2">Extracting data from PDF...</p>
-            </div>
+            <LoadingProgress isLoading={isLoading} stage={loadingStage} />
           )}
         </div>
       )}

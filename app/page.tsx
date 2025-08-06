@@ -5,78 +5,53 @@ import { PDFUpload } from '@/components/pdf-upload';
 import { ExtractionPreview } from '@/components/extraction-preview';
 import { PurchaseOrderForm } from '@/components/purchase-order-form';
 import { ExtractPDFResponse } from '@/types';
-import { extractPDFInBrowser } from '@/lib/pdf-client-extractor';
 import toast from 'react-hot-toast';
 
 export default function Home() {
   const [step, setStep] = useState<'upload' | 'preview' | 'form'>('upload');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState<'uploading' | 'extracting' | 'processing' | 'complete'>('uploading');
   const [extractionResult, setExtractionResult] = useState<ExtractPDFResponse | null>(null);
 
   const handleFileSelect = async (file: File) => {
     setIsLoading(true);
+    setLoadingStage('uploading');
     
     try {
-      // First, try client-side extraction
-      console.log('Attempting client-side PDF extraction...');
-      let extractedText = '';
+      const formData = new FormData();
+      formData.append('file', file);
       
-      try {
-        const clientExtraction = await extractPDFInBrowser(file);
-        extractedText = clientExtraction.text;
-        console.log('Client-side extraction successful, text length:', extractedText.length);
-      } catch (clientError) {
-        console.error('Client-side extraction failed:', clientError);
-        toast.error('Could not read PDF in browser, trying server...');
+      // Update stage after upload starts
+      setTimeout(() => setLoadingStage('extracting'), 500);
+
+      const response = await fetch('/api/extract-pdf', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      // Update stage when processing with AI
+      setLoadingStage('processing');
+
+      const data: ExtractPDFResponse = await response.json();
+
+      if (!response.ok || !data.success) {
+        console.error('Extraction failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          data
+        });
+        throw new Error(data.errors?.[0] || 'Failed to extract PDF');
       }
       
-      // If we have text, send it to the API for Claude processing
-      if (extractedText && extractedText.length > 50) {
-        const response = await fetch('/api/extract-pdf', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text: extractedText,
-            fileName: file.name
-          }),
-        });
+      // Final stage
+      setLoadingStage('complete');
+      
+      // Small delay to show completion
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-        const data: ExtractPDFResponse = await response.json();
-
-        if (!response.ok || !data.success) {
-          throw new Error(data.errors?.[0] || 'Failed to process PDF text');
-        }
-
-        setExtractionResult(data);
-        setStep('preview');
-        toast.success('PDF extracted successfully!');
-      } else {
-        // Fallback to original server-side extraction
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch('/api/extract-pdf', {
-          method: 'POST',
-          body: formData,
-        });
-
-        const data: ExtractPDFResponse = await response.json();
-
-        if (!response.ok || !data.success) {
-          console.error('Server extraction failed:', {
-            status: response.status,
-            statusText: response.statusText,
-            data
-          });
-          throw new Error(data.errors?.[0] || 'Failed to extract PDF');
-        }
-
-        setExtractionResult(data);
-        setStep('preview');
-        toast.success('PDF extracted successfully!');
-      }
+      setExtractionResult(data);
+      setStep('preview');
+      toast.success('PDF extracted successfully!');
     } catch (error) {
       console.error('Extraction error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to extract PDF');
@@ -84,6 +59,7 @@ export default function Home() {
       setStep('form');
     } finally {
       setIsLoading(false);
+      setLoadingStage('uploading'); // Reset for next time
     }
   };
 
@@ -155,6 +131,7 @@ export default function Home() {
             <PDFUpload 
               onFileSelect={handleFileSelect}
               isLoading={isLoading}
+              loadingStage={loadingStage}
               className="mb-6"
             />
             

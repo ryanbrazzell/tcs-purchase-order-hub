@@ -1,4 +1,5 @@
 import { ExtractionError } from './errors';
+import { extractTextSimple } from './pdf-simple';
 
 export interface PDFExtractionResult {
   text: string;
@@ -35,7 +36,20 @@ export async function extractTextFromPDF(file: File): Promise<PDFExtractionResul
       throw new ExtractionError('File is not a valid PDF (missing PDF signature)');
     }
     
-    // Parse PDF with error handling
+    // Try simple extraction first
+    const simpleText = await extractTextSimple(buffer);
+    console.log('[pdf-extractor] Simple extraction result:', simpleText.length, 'chars');
+    
+    if (simpleText && simpleText.length > 100) {
+      // Simple extraction worked!
+      return {
+        text: simpleText,
+        numPages: 1, // We don't know the actual count
+        info: {}
+      };
+    }
+    
+    // Parse PDF with pdf-parse as fallback
     let data;
     try {
       data = await pdf.default(buffer);
