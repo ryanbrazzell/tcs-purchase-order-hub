@@ -37,7 +37,7 @@ const EXTRACTION_SCHEMA = {
     description: '',
     additionalNotes: ''
   },
-  lineItems: []
+  lineItems: [] as any[]
 };
 
 export async function POST(request: NextRequest) {

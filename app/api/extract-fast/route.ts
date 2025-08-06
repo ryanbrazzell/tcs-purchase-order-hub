@@ -55,7 +55,13 @@ export async function POST(request: NextRequest) {
         description: extractPattern(extractedText, /(service|work|job|project)[\s:]+([^.\n]{10,100})/i, 2) || '',
         additionalNotes: ''
       },
-      lineItems: []
+      lineItems: [] as Array<{
+        description: string;
+        quantity: number;
+        unit: string;
+        unitPrice: number;
+        total: number;
+      }>
     };
     
     // Try to extract pricing
