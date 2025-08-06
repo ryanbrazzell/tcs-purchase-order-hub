@@ -50,22 +50,43 @@ export function PurchaseOrderForm({ initialData, onSubmit }: PurchaseOrderFormPr
 
   // Initialize with provided data
   useEffect(() => {
-    if (initialData) {
-      // Merge the initial data with current PO
-      const mergedData = {
-        ...currentPO,
-        ...initialData,
-        customer: { ...currentPO.customer, ...initialData.customer },
-        contractor: { ...currentPO.contractor, ...initialData.contractor },
-        job: { ...currentPO.job, ...initialData.job },
-        lineItems: initialData.lineItems || currentPO.lineItems
+    if (initialData && Object.keys(initialData).length > 0) {
+      // Create complete data structure
+      const formData = {
+        customer: {
+          ...initialData.customer || {},
+          companyName: initialData.customer?.companyName || '',
+          contactName: initialData.customer?.contactName || '',
+          email: initialData.customer?.email || '',
+          phone: initialData.customer?.phone || '',
+          jobLocation: initialData.customer?.jobLocation || '',
+          onsiteContactName: initialData.customer?.onsiteContactName || '',
+          onsiteContactPhone: initialData.customer?.onsiteContactPhone || ''
+        },
+        contractor: {
+          ...initialData.contractor || {},
+          companyName: initialData.contractor?.companyName || 'TCS Floors',
+          technicianName: initialData.contractor?.technicianName || '',
+          email: initialData.contractor?.email || '',
+          phone: initialData.contractor?.phone || ''
+        },
+        job: {
+          ...initialData.job || {},
+          poNumber: initialData.job?.poNumber || '',
+          requestedServiceDate: initialData.job?.requestedServiceDate || '',
+          squareFootage: initialData.job?.squareFootage || 0,
+          floorType: initialData.job?.floorType || '',
+          description: initialData.job?.description || '',
+          additionalNotes: initialData.job?.additionalNotes || ''
+        },
+        lineItems: initialData.lineItems || []
       };
       
-      // Update both the store and the form
-      setPO(mergedData);
-      reset(mergedData);
+      // Update store and reset form with new data
+      setPO(formData as PurchaseOrder);
+      reset(formData as PurchaseOrder);
     }
-  }, [initialData, setPO, reset, currentPO]);
+  }, [initialData]); // Remove currentPO dependency to avoid loops
 
   const onFormSubmit = async (data: PurchaseOrder) => {
     try {

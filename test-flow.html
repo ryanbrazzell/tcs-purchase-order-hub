@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Full Flow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-8">
+    <h1 class="text-2xl font-bold mb-4">Test Full Extraction and Edit Flow</h1>
+    
+    <div class="mb-4">
+        <input type="file" id="fileInput" accept="application/pdf" class="mb-2">
+        <button onclick="testExtraction()" class="bg-blue-500 text-white px-4 py-2 rounded">Test Extraction</button>
+    </div>
+    
+    <div id="extractedData" class="mb-4 p-4 bg-gray-100 rounded hidden">
+        <h2 class="text-xl font-bold mb-2">Extracted Data:</h2>
+        <pre id="extractedJson" class="text-sm"></pre>
+    </div>
+    
+    <div id="editForm" class="hidden">
+        <h2 class="text-xl font-bold mb-4">Edit Extracted Data:</h2>
+        <form id="poForm" class="space-y-4">
+            <div>
+                <label class="block font-bold">Company Name:</label>
+                <input type="text" id="companyName" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block font-bold">Contact Name:</label>
+                <input type="text" id="contactName" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block font-bold">Email:</label>
+                <input type="email" id="email" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block font-bold">Phone:</label>
+                <input type="text" id="phone" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block font-bold">Job Location:</label>
+                <input type="text" id="jobLocation" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block font-bold">Square Footage:</label>
+                <input type="number" id="squareFootage" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block font-bold">Floor Type:</label>
+                <input type="text" id="floorType" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block font-bold">Description:</label>
+                <textarea id="description" class="w-full border p-2 rounded" rows="3"></textarea>
+            </div>
+            <button type="button" onclick="generatePDF()" class="bg-green-500 text-white px-4 py-2 rounded">
+                Generate PDF
+            </button>
+        </form>
+    </div>
+    
+    <div id="result" class="mt-4"></div>
+    
+    <script>
+        let currentData = null;
+        
+        async function testExtraction() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('/api/extract-complete', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                console.log('Extraction response:', data);
+                
+                if (data.success) {
+                    currentData = data.extractedData;
+                    document.getElementById('extractedJson').textContent = JSON.stringify(data.extractedData, null, 2);
+                    document.getElementById('extractedData').classList.remove('hidden');
+                    
+                    // Populate form
+                    document.getElementById('companyName').value = data.extractedData.customer.companyName || '';
+                    document.getElementById('contactName').value = data.extractedData.customer.contactName || '';
+                    document.getElementById('email').value = data.extractedData.customer.email || '';
+                    document.getElementById('phone').value = data.extractedData.customer.phone || '';
+                    document.getElementById('jobLocation').value = data.extractedData.customer.jobLocation || '';
+                    document.getElementById('squareFootage').value = data.extractedData.job.squareFootage || 0;
+                    document.getElementById('floorType').value = data.extractedData.job.floorType || '';
+                    document.getElementById('description').value = data.extractedData.job.description || '';
+                    
+                    document.getElementById('editForm').classList.remove('hidden');
+                    
+                    // Test that fields are editable
+                    document.getElementById('result').innerHTML = '<p class="text-green-600">✓ Extraction successful! Try editing the fields above.</p>';
+                } else {
+                    document.getElementById('result').innerHTML = '<p class="text-red-600">Extraction failed: ' + (data.errors || 'Unknown error') + '</p>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = '<p class="text-red-600">Error: ' + error.message + '</p>';
+            }
+        }
+        
+        async function generatePDF() {
+            // Update current data with form values
+            currentData.customer.companyName = document.getElementById('companyName').value;
+            currentData.customer.contactName = document.getElementById('contactName').value;
+            currentData.customer.email = document.getElementById('email').value;
+            currentData.customer.phone = document.getElementById('phone').value;
+            currentData.customer.jobLocation = document.getElementById('jobLocation').value;
+            currentData.job.squareFootage = parseInt(document.getElementById('squareFootage').value) || 0;
+            currentData.job.floorType = document.getElementById('floorType').value;
+            currentData.job.description = document.getElementById('description').value;
+            
+            console.log('Generating PDF with data:', currentData);
+            
+            try {
+                const response = await fetch('/api/generate-pdf', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(currentData)
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `PO-${currentData.job.poNumber || 'draft'}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    document.getElementById('result').innerHTML = '<p class="text-green-600">✓ PDF generated successfully!</p>';
+                } else {
+                    const error = await response.json();
+                    document.getElementById('result').innerHTML = '<p class="text-red-600">PDF generation failed: ' + JSON.stringify(error) + '</p>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = '<p class="text-red-600">Error: ' + error.message + '</p>';
+            }
+        }
+    </script>
+</body>
+</html>
