@@ -24,7 +24,7 @@ export default function Home() {
       // Update stage after upload starts
       setTimeout(() => setLoadingStage('extracting'), 500);
 
-      const response = await fetch('/api/extract-simple', {
+      let response = await fetch('/api/extract-claude', {
         method: 'POST',
         body: formData,
       });
@@ -32,15 +32,27 @@ export default function Home() {
       // Update stage when processing with AI
       setLoadingStage('processing');
 
-      const data: ExtractPDFResponse = await response.json();
+      let data: ExtractPDFResponse = await response.json();
 
+      // If Claude extraction fails, fallback to simple mock
       if (!response.ok || !data.success) {
-        console.error('Extraction failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          data
+        console.error('Claude extraction failed, trying simple fallback...');
+        
+        response = await fetch('/api/extract-simple', {
+          method: 'POST',
+          body: formData,
         });
-        throw new Error(data.errors?.[0] || 'Failed to extract PDF');
+        
+        data = await response.json();
+        
+        if (!response.ok || !data.success) {
+          console.error('All extraction methods failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            data
+          });
+          throw new Error(data.errors?.[0] || 'Failed to extract PDF');
+        }
       }
       
       // Final stage
