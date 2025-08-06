@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { toFile } from 'openai/uploads';
+import { pdf } from 'pdf-to-img';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,35 +26,51 @@ export async function POST(request: NextRequest) {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     
     try {
-      console.log('[extract-text-only] Uploading PDF to OpenAI...');
+      // Convert PDF to buffer
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
       
-      // Upload the PDF file to OpenAI
-      const uploadedFile = await openai.files.create({
-        file: await toFile(file),
-        purpose: 'assistants'
+      console.log('[extract-text-only] Converting PDF to images...');
+      
+      // Convert PDF pages to images
+      const document = await pdf(buffer, { scale: 2.0 });
+      const imageUrls: string[] = [];
+      
+      for await (const image of document) {
+        const base64 = image.toString('base64');
+        imageUrls.push(`data:image/png;base64,${base64}`);
+        console.log(`[extract-text-only] Converted page to image (${base64.length} chars)`);
+      }
+      
+      console.log(`[extract-text-only] Converted ${imageUrls.length} pages to images`);
+      console.log('[extract-text-only] Sending images to OpenAI Vision for text extraction...');
+      
+      // Build message content with all page images
+      const messageContent: any[] = [
+        {
+          type: 'text',
+          text: 'Extract ALL text from these document pages. Include every piece of text you can see, maintaining the structure and layout as much as possible. Include headers, body text, tables, everything. Return the complete text content exactly as it appears. Preserve the exact formatting and spacing.'
+        }
+      ];
+      
+      // Add each page image
+      imageUrls.forEach((url, index) => {
+        messageContent.push({
+          type: 'image_url',
+          image_url: {
+            url: url,
+            detail: 'high' // High detail for better text extraction
+          }
+        });
       });
       
-      console.log(`[extract-text-only] File uploaded with ID: ${uploadedFile.id}`);
-      console.log('[extract-text-only] Sending to OpenAI Vision for text extraction...');
-      
-      // Use the file ID in the vision request
+      // Extract all text from the images using Vision
       const visionResponse = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Extract ALL text from this PDF document. Include every piece of text you can see, maintaining the structure and layout as much as possible. Include headers, body text, tables, everything. Return the complete text content exactly as it appears.'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `file://${uploadedFile.id}`
-                }
-              }
-            ]
+            content: messageContent
           }
         ],
         max_tokens: 4000,
@@ -65,65 +81,16 @@ export async function POST(request: NextRequest) {
       
       console.log(`[extract-text-only] Extracted ${extractedText.length} characters from PDF`);
       
-      // Clean up - delete the uploaded file
-      try {
-        await openai.files.del(uploadedFile.id);
-        console.log(`[extract-text-only] Cleaned up uploaded file ${uploadedFile.id}`);
-      } catch (error) {
-        console.error('[extract-text-only] Failed to delete uploaded file:', error);
-      }
-      
       return NextResponse.json({
         success: true,
         extractedText: extractedText,
         characterCount: extractedText.length,
+        pageCount: imageUrls.length,
         errors: []
       });
       
     } catch (error: any) {
-      console.error('[extract-text-only] OpenAI error:', error);
-      
-      // Try alternative approach with base64
-      if (error.message?.includes('file://') || error.message?.includes('Invalid')) {
-        console.log('[extract-text-only] Trying base64 approach...');
-        
-        const arrayBuffer = await file.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString('base64');
-        const dataUrl = `data:application/pdf;base64,${base64}`;
-        
-        const visionResponse = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'Extract ALL text from this PDF document. Include every piece of text you can see, maintaining the structure and layout as much as possible. Include headers, body text, tables, everything. Return the complete text content exactly as it appears.'
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: dataUrl
-                  }
-                }
-              ]
-            }
-          ],
-          max_tokens: 4000,
-          temperature: 0
-        });
-        
-        const extractedText = visionResponse.choices[0]?.message?.content || '';
-        
-        return NextResponse.json({
-          success: true,
-          extractedText: extractedText,
-          characterCount: extractedText.length,
-          errors: []
-        });
-      }
-      
+      console.error('[extract-text-only] Processing error:', error);
       throw error;
     }
     
