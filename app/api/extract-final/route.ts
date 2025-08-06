@@ -5,7 +5,7 @@ import Anthropic from '@anthropic-ai/sdk';
 async function extractPDFText(buffer: Buffer): Promise<string> {
   try {
     // Try pdf-parse first
-    const pdf = await import('pdf-parse/lib/pdf-parse.js');
+    const pdf = await import('pdf-parse');
     const data = await pdf.default(buffer);
     return data.text;
   } catch (error) {

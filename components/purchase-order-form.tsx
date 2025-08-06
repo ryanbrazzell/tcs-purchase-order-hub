@@ -66,7 +66,7 @@ export function PurchaseOrderForm({ initialData, onSubmit }: PurchaseOrderFormPr
       setPO(mergedData);
       reset(mergedData);
     }
-  }, [initialData, setPO, reset]);
+  }, [initialData, setPO, reset, currentPO]);
 
   const onFormSubmit = async (data: PurchaseOrder) => {
     try {
