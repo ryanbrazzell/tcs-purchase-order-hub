@@ -1,38 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-
-// Simple but effective text extraction
-async function extractPDFText(buffer: Buffer): Promise<string> {
-  try {
-    // Try pdf-parse first
-    const pdf = await import('pdf-parse');
-    const data = await pdf.default(buffer);
-    return data.text;
-  } catch (error) {
-    console.log('pdf-parse failed, trying simple extraction');
-    
-    // Fallback to simple extraction
-    const content = buffer.toString('binary');
-    
-    // Extract text between parentheses followed by Tj
-    const texts: string[] = [];
-    const matches = content.matchAll(/\(([^)]+)\)\s*Tj/g);
-    
-    for (const match of matches) {
-      if (match[1]) {
-        // Decode PDF escape sequences
-        let text = match[1]
-          .replace(/\\(\d{3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
-          .replace(/\\\(/g, '(')
-          .replace(/\\\)/g, ')')
-          .replace(/\\\\/g, '\\');
-        texts.push(text);
-      }
-    }
-    
-    return texts.join(' ').trim();
-  }
-}
+import { extractTextSimple } from '@/lib/pdf-simple';
 
 const SYSTEM_PROMPT = `You are a data extraction specialist. Extract information from the provided text and return it in the exact JSON format requested. If a field cannot be found, use an empty string for text fields or 0 for numeric fields.`;
 
@@ -96,8 +64,8 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    // Extract text
-    const extractedText = await extractPDFText(buffer);
+    // Extract text using our simple method
+    const extractedText = await extractTextSimple(buffer);
     console.log('[extract-final] Extracted text length:', extractedText.length);
     console.log('[extract-final] First 500 chars:', extractedText.substring(0, 500));
     
