@@ -62,10 +62,29 @@ export async function POST(request: NextRequest) {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      fullText += pageText + '\n\n';
+      
+      // Better text extraction that preserves structure
+      let lastY = -1;
+      let textLine = '';
+      let pageText = '';
+      
+      for (const item of textContent.items) {
+        // Check if we're on a new line (Y position changed significantly)
+        if (lastY !== -1 && Math.abs(item.transform[5] - lastY) > 5) {
+          pageText += textLine + '\n';
+          textLine = '';
+        }
+        
+        textLine += item.str + ' ';
+        lastY = item.transform[5];
+      }
+      
+      // Add the last line
+      if (textLine) {
+        pageText += textLine + '\n';
+      }
+      
+      fullText += `--- Page ${i} ---\n${pageText}\n\n`;
     }
     
     console.log(`[parse-proposal] Extracted ${fullText.length} characters`);
@@ -79,7 +98,7 @@ export async function POST(request: NextRequest) {
     // Step 2: Send to OpenAI for field extraction
     console.log('[parse-proposal] Sending to OpenAI for extraction...');
     
-    const prompt = `Extract information from this business document and return ONLY valid JSON matching this structure:
+    const prompt = `You are analyzing a TCS floor service proposal/quote. Extract information and return ONLY valid JSON matching this structure:
 
 ${JSON.stringify(FIELD_SCHEMA, null, 2)}
 
@@ -88,7 +107,17 @@ Rules:
 - If a field is not found, use empty string ""
 - Extract phone numbers in format "123-456-7890"
 - Extract only numbers for square_footage (e.g., "8604")
-- Look for customer info, job details, pricing, addresses
+- Look for:
+  - Customer company name (the facility/organization receiving service)
+  - Contact names and phone numbers
+  - Job location/address
+  - Square footage of floor area
+  - Type of flooring (VCT, tile, etc)
+  - Service description (stripping, waxing, etc)
+  - Pricing information (subtotal, tax, total)
+  - Timeline or requested dates
+- For customer_company, look for facility names like "Hospital", "School", etc.
+- For addresses, combine street, city, state, zip into appropriate fields
 
 Document text:
 ${fullText}`;
