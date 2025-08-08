@@ -28,14 +28,15 @@ export async function POST(request: NextRequest) {
     
     // Get PDF metadata
     const metadata = await pdf.getMetadata();
+    const info = metadata.info as any;
     analysis.pdfInfo = {
-      title: metadata.info.Title || 'N/A',
-      author: metadata.info.Author || 'N/A',
-      subject: metadata.info.Subject || 'N/A',
-      creator: metadata.info.Creator || 'N/A',
-      producer: metadata.info.Producer || 'N/A',
-      creationDate: metadata.info.CreationDate || 'N/A',
-      modDate: metadata.info.ModDate || 'N/A'
+      title: info?.Title || 'N/A',
+      author: info?.Author || 'N/A',
+      subject: info?.Subject || 'N/A',
+      creator: info?.Creator || 'N/A',
+      producer: info?.Producer || 'N/A',
+      creationDate: info?.CreationDate || 'N/A',
+      modDate: info?.ModDate || 'N/A'
     };
     
     // Analyze each page
