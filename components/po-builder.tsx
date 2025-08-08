@@ -81,15 +81,21 @@ export function POBuilder() {
         body: formData
       });
       
+      const data = await response.json();
+      
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to parse PDF');
+        console.error('Parse error:', data);
+        throw new Error(data.error || 'Failed to parse PDF');
       }
       
-      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
       setFields(data);
       toast.success('PDF parsed successfully!');
     } catch (error: any) {
+      console.error('Upload error:', error);
       toast.error(error.message || 'Failed to parse PDF');
     } finally {
       setIsUploading(false);

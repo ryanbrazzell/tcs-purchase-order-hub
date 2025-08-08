@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createWorker } from 'tesseract.js';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -43,17 +42,6 @@ const chunk = (text: string, maxLength: number = 12000): string[] => {
   return chunks;
 };
 
-// OCR fallback if PDF has no embedded text
-async function ocrBufferToText(buffer: Buffer): Promise<string> {
-  const worker = await createWorker('eng');
-  try {
-    const { data } = await worker.recognize(buffer);
-    return data.text || '';
-  } finally {
-    await worker.terminate();
-  }
-}
-
 function extractionPrompt(pdfText: string): string {
   return `
 You are a precise information extractor for commercial floor-care proposals.
@@ -95,7 +83,7 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    // 1) Extract text (try native, then OCR)
+    // Extract text using pdf-parse
     let text = '';
     try {
       // Dynamic import to avoid build issues
@@ -103,64 +91,71 @@ export async function POST(request: NextRequest) {
       const parsed = await pdfParse(buffer);
       text = parsed.text?.trim() || '';
       console.log(`[parse-proposal] Extracted ${text.length} characters with pdf-parse`);
-    } catch (e) {
-      console.log('[parse-proposal] pdf-parse failed, trying OCR...');
+    } catch (e: any) {
+      console.error('[parse-proposal] pdf-parse failed:', e.message);
+      return NextResponse.json({ 
+        error: 'Failed to extract text from PDF. Please ensure the PDF contains selectable text (not a scanned image).' 
+      }, { status: 400 });
     }
     
     if (!text) {
-      text = (await ocrBufferToText(buffer)).trim();
-      console.log(`[parse-proposal] Extracted ${text.length} characters with OCR`);
+      return NextResponse.json({ 
+        error: 'No text found in PDF. The PDF may be a scanned image or corrupted.' 
+      }, { status: 400 });
     }
     
-    if (!text) {
-      return NextResponse.json({ error: 'Could not read PDF text' }, { status: 400 });
-    }
-    
-    // 2) ChatGPT structured extraction (chunk if needed)
+    // ChatGPT structured extraction (chunk if needed)
     const parts = chunk(text);
     let finalJson: any;
     
-    if (parts.length === 1) {
-      console.log('[parse-proposal] Single chunk, extracting directly...');
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: 'You return only strict JSON.' },
-          { role: 'user', content: extractionPrompt(parts[0]) }
-        ],
-        temperature: 0.1
-      });
-      finalJson = JSON.parse(completion.choices[0].message.content || '{}');
-    } else {
-      console.log(`[parse-proposal] ${parts.length} chunks, summarizing first...`);
-      // Summarize chunks → merge
-      const summaries: string[] = [];
-      for (let i = 0; i < parts.length; i++) {
-        const c = await openai.chat.completions.create({
+    try {
+      if (parts.length === 1) {
+        console.log('[parse-proposal] Single chunk, extracting directly...');
+        const completion = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
+          response_format: { type: 'json_object' },
           messages: [
-            { role: 'system', content: 'Summarize only factual details relevant to PO mapping.' },
-            { role: 'user', content: `Chunk ${i+1}/${parts.length}:\n${parts[i]}` }
+            { role: 'system', content: 'You return only strict JSON.' },
+            { role: 'user', content: extractionPrompt(parts[0]) }
           ],
           temperature: 0.1
         });
-        summaries.push(c.choices[0].message.content || '');
+        finalJson = JSON.parse(completion.choices[0].message.content || '{}');
+      } else {
+        console.log(`[parse-proposal] ${parts.length} chunks, summarizing first...`);
+        // Summarize chunks → merge
+        const summaries: string[] = [];
+        for (let i = 0; i < parts.length; i++) {
+          const c = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: 'Summarize only factual details relevant to PO mapping.' },
+              { role: 'user', content: `Chunk ${i+1}/${parts.length}:\n${parts[i]}` }
+            ],
+            temperature: 0.1
+          });
+          summaries.push(c.choices[0].message.content || '');
+        }
+        
+        const merged = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: 'Return only strict JSON.' },
+            { role: 'user', content: extractionPrompt(summaries.join('\n---\n')) }
+          ],
+          temperature: 0.1
+        });
+        finalJson = JSON.parse(merged.choices[0].message.content || '{}');
       }
-      
-      const merged = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: 'Return only strict JSON.' },
-          { role: 'user', content: extractionPrompt(summaries.join('\n---\n')) }
-        ],
-        temperature: 0.1
-      });
-      finalJson = JSON.parse(merged.choices[0].message.content || '{}');
+    } catch (e: any) {
+      console.error('[parse-proposal] OpenAI error:', e.message);
+      return NextResponse.json({ 
+        error: 'Failed to process text with OpenAI. Please check your API key and try again.' 
+      }, { status: 500 });
     }
     
-    // 3) Ensure all keys exist
+    // Ensure all keys exist
     const safeResult = { ...FIELD_SCHEMA, ...finalJson };
     
     // Add some TCS-specific defaults
@@ -172,6 +167,8 @@ export async function POST(request: NextRequest) {
     
   } catch (error: any) {
     console.error('[parse-proposal] Error:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return NextResponse.json({ 
+      error: error.message || 'An unexpected error occurred' 
+    }, { status: 500 });
   }
 }
