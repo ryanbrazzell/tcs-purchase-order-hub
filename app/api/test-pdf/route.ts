@@ -1,98 +1,107 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractTextFromPDF } from '@/lib/pdf-extractor';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Initialize PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
 
 export async function POST(request: NextRequest) {
-  console.log('[test-pdf] Starting PDF test...');
-  
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
     
-    console.log('[test-pdf] File info:', {
-      name: file.name,
-      type: file.type,
-      size: file.size
-    });
+    console.log(`[test-pdf] Testing ${file.name} (${file.size} bytes)`);
     
-    // Try different approaches
-    const results: any = {
-      timestamp: new Date().toISOString(),
-      file: {
-        name: file.name,
-        type: file.type,
-        size: file.size
-      },
-      tests: {}
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    const analysis = {
+      fileName: file.name,
+      fileSize: file.size,
+      numPages: pdf.numPages,
+      pdfInfo: {} as any,
+      pageAnalysis: [] as any[]
     };
     
-    // Test 1: Check if we can read the file as buffer
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      results.tests.arrayBuffer = {
-        success: true,
-        size: arrayBuffer.byteLength
-      };
-    } catch (error: any) {
-      results.tests.arrayBuffer = {
-        success: false,
-        error: error.message
-      };
-    }
+    // Get PDF metadata
+    const metadata = await pdf.getMetadata();
+    analysis.pdfInfo = {
+      title: metadata.info.Title || 'N/A',
+      author: metadata.info.Author || 'N/A',
+      subject: metadata.info.Subject || 'N/A',
+      creator: metadata.info.Creator || 'N/A',
+      producer: metadata.info.Producer || 'N/A',
+      creationDate: metadata.info.CreationDate || 'N/A',
+      modDate: metadata.info.ModDate || 'N/A'
+    };
     
-    // Test 2: Try extracting with pdf-parse
-    try {
-      const extraction = await extractTextFromPDF(file);
-      results.tests.extraction = {
-        success: true,
-        textLength: extraction.text.length,
-        numPages: extraction.numPages,
-        firstChars: extraction.text.substring(0, 100)
-      };
-    } catch (error: any) {
-      results.tests.extraction = {
-        success: false,
-        error: error.message,
-        stack: error.stack
-      };
-    }
-    
-    // Test 3: Try direct pdf-parse import
-    try {
-      const pdf = await import('pdf-parse');
-      results.tests.pdfParseImport = {
-        success: true,
-        hasDefault: !!pdf.default
-      };
+    // Analyze each page
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
       
-      // Try parsing
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const data = await pdf.default(buffer);
+      // Count different types of content
+      let textItemCount = 0;
+      let totalChars = 0;
+      let emptyItems = 0;
+      let sampleText = [];
       
-      results.tests.directParse = {
-        success: true,
-        textLength: data.text?.length || 0,
-        numPages: data.numpages,
-        hasText: !!data.text
-      };
-    } catch (error: any) {
-      results.tests.directParse = {
-        success: false,
-        error: error.message,
-        name: error.name,
-        code: error.code
-      };
+      for (const item of textContent.items) {
+        textItemCount++;
+        if (item.str) {
+          totalChars += item.str.length;
+          if (sampleText.length < 5) {
+            sampleText.push(item.str);
+          }
+        } else {
+          emptyItems++;
+        }
+      }
+      
+      // Check for fonts
+      const fonts = new Set();
+      for (const item of textContent.items) {
+        if (item.fontName) {
+          fonts.add(item.fontName);
+        }
+      }
+      
+      analysis.pageAnalysis.push({
+        pageNumber: i,
+        textItems: textItemCount,
+        totalCharacters: totalChars,
+        emptyItems: emptyItems,
+        fonts: Array.from(fonts),
+        sampleText: sampleText,
+        hasText: totalChars > 0
+      });
     }
     
-    return NextResponse.json(results);
+    // Try alternative extraction method
+    let alternativeText = '';
+    try {
+      const pdfParse = (await import('pdf-parse')).default;
+      const parsed = await pdfParse(Buffer.from(arrayBuffer));
+      alternativeText = parsed.text || '';
+    } catch (e) {
+      alternativeText = 'pdf-parse failed';
+    }
+    
+    analysis['alternativeExtraction'] = {
+      method: 'pdf-parse',
+      textLength: alternativeText.length,
+      firstChars: alternativeText.substring(0, 200)
+    };
+    
+    return NextResponse.json(analysis);
+    
   } catch (error: any) {
     console.error('[test-pdf] Error:', error);
-    return NextResponse.json({
-      error: error.message,
+    return NextResponse.json({ 
+      error: error.message || 'Failed to analyze PDF',
       stack: error.stack
     }, { status: 500 });
   }
