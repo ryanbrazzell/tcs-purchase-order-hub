@@ -63,31 +63,62 @@ export async function POST(request: NextRequest) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       
-      // Better text extraction that preserves structure
-      let lastY = -1;
-      let textLine = '';
+      // Extract text items preserving structure
+      const items = textContent.items as any[];
       let pageText = '';
       
-      for (const item of textContent.items) {
-        // Check if we're on a new line (Y position changed significantly)
-        if (lastY !== -1 && Math.abs(item.transform[5] - lastY) > 5) {
-          pageText += textLine + '\n';
-          textLine = '';
+      // Sort items by Y position (top to bottom) then X position (left to right)
+      items.sort((a, b) => {
+        const yDiff = b.transform[5] - a.transform[5]; // Note: Y coordinates are inverted in PDF
+        if (Math.abs(yDiff) > 2) return yDiff;
+        return a.transform[4] - b.transform[4]; // X coordinate for same line
+      });
+      
+      let lastY = -1;
+      let currentLine = '';
+      
+      for (const item of items) {
+        const y = item.transform[5];
+        
+        // New line if Y position changed significantly
+        if (lastY !== -1 && Math.abs(y - lastY) > 2) {
+          if (currentLine.trim()) {
+            pageText += currentLine.trim() + '\n';
+          }
+          currentLine = '';
         }
         
-        textLine += item.str + ' ';
-        lastY = item.transform[5];
+        // Add space if there's a gap between items on the same line
+        if (currentLine && item.transform[4] > 0) {
+          currentLine += ' ';
+        }
+        
+        currentLine += item.str;
+        lastY = y;
       }
       
-      // Add the last line
-      if (textLine) {
-        pageText += textLine + '\n';
+      // Don't forget the last line
+      if (currentLine.trim()) {
+        pageText += currentLine.trim() + '\n';
       }
       
       fullText += `--- Page ${i} ---\n${pageText}\n\n`;
     }
     
-    console.log(`[parse-proposal] Extracted ${fullText.length} characters`);
+    console.log(`[parse-proposal] Extracted ${fullText.length} characters with pdfjs-dist`);
+    
+    // If pdfjs-dist didn't get text, try pdf-parse as fallback
+    if (!fullText.trim() || fullText.length < 100) {
+      console.log('[parse-proposal] Trying pdf-parse as fallback...');
+      try {
+        const pdfParse = (await import('pdf-parse')).default;
+        const parsed = await pdfParse(Buffer.from(arrayBuffer));
+        fullText = parsed.text || '';
+        console.log(`[parse-proposal] pdf-parse extracted ${fullText.length} characters`);
+      } catch (e) {
+        console.error('[parse-proposal] pdf-parse also failed:', e);
+      }
+    }
     
     if (!fullText.trim()) {
       return NextResponse.json({ 
