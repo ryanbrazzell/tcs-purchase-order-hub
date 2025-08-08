@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { Loader2, Upload, Download, FileText, Eye } from 'lucide-react';
-import { convertPDFToImages } from '@/lib/pdf-converter';
+import { Loader2, Upload, Download, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type FieldKey = 
@@ -64,18 +63,6 @@ const fieldGroups = {
 };
 
 export function POBuilder() {
-  // Load PDF.js library
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = '//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    script.async = true;
-    document.body.appendChild(script);
-    
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, []);
-  
   const [fields, setFields] = useState<POFields | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -86,7 +73,6 @@ export function POBuilder() {
     
     setIsUploading(true);
     try {
-      // First try regular text extraction
       const formData = new FormData();
       formData.append('file', file);
       
@@ -97,40 +83,12 @@ export function POBuilder() {
       
       const data = await response.json();
       
-      if (!response.ok || data.error?.includes('no text found') || data.error?.includes('selectable text')) {
-        // If no text found, try vision approach
-        console.log('No text found, trying vision extraction...');
-        toast('Converting PDF to images for extraction...', { icon: '👁️' });
-        
-        try {
-          // Convert PDF to images in browser
-          const images = await convertPDFToImages(file);
-          
-          // Send images to vision endpoint
-          const visionResponse = await fetch('/api/parse-proposal-vision', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ images })
-          });
-          
-          const visionData = await visionResponse.json();
-          
-          if (!visionResponse.ok) {
-            throw new Error(visionData.error || 'Vision extraction failed');
-          }
-          
-          setFields(visionData);
-          toast.success('PDF extracted successfully using vision!');
-        } catch (visionError: any) {
-          console.error('Vision extraction error:', visionError);
-          throw new Error('Failed to extract PDF. The document may be corrupted or unsupported.');
-        }
-      } else if (!response.ok) {
+      if (!response.ok) {
         throw new Error(data.error || 'Failed to parse PDF');
-      } else {
-        setFields(data);
-        toast.success('PDF parsed successfully!');
       }
+      
+      setFields(data);
+      toast.success('PDF parsed successfully!');
     } catch (error: any) {
       console.error('Upload error:', error);
       toast.error(error.message || 'Failed to parse PDF');
