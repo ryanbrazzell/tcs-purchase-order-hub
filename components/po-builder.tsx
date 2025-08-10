@@ -81,16 +81,8 @@ export function POBuilder() {
       const formData = new FormData();
       formData.append('file', file);
       
-      // Test with simple endpoint first
-      const testResponse = await fetch('/api/simple-parse', {
-        method: 'POST',
-        body: formData
-      });
-      
-      console.log('[po-builder] Test response status:', testResponse.status);
-      
-      // Temporarily use debug endpoint
-      const response = await fetch('/api/parse-proposal-debug', {
+      // Use the main parse-proposal endpoint
+      const response = await fetch('/api/parse-proposal', {
         method: 'POST',
         body: formData
       });
@@ -120,14 +112,6 @@ export function POBuilder() {
         }
         
         throw new Error(data.error || 'Failed to parse PDF');
-      }
-      
-      // Extract debug info if present
-      if (data._debug) {
-        console.log('=== DEBUG INFO ===');
-        console.log(JSON.stringify(data._debug, null, 2));
-        console.log('==================');
-        delete data._debug; // Remove debug info before setting fields
       }
       
       logger.info('Successfully parsed data', { data });
