@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import OpenAI from 'openai';
+import { Logger } from '@/lib/logger';
+
+const logger = new Logger('parse-proposal');
 
 // Polyfill for Node.js
 if (typeof globalThis.DOMMatrix === 'undefined') {
@@ -45,30 +48,30 @@ const FIELD_SCHEMA = {
 };
 
 export async function POST(request: NextRequest) {
-  console.log('[parse-proposal] Starting PDF parsing request');
+  logger.info('Starting PDF parsing request');
   
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
     if (!file) {
-      console.error('[parse-proposal] No file uploaded');
+      logger.error('No file uploaded');
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
     
     if (!process.env.OPENAI_API_KEY) {
-      console.error('[parse-proposal] OpenAI API key not configured');
+      logger.error('OpenAI API key not configured');
       return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
     }
     
-    console.log(`[parse-proposal] Processing ${file.name} (${file.size} bytes, type: ${file.type})`);
+    logger.info(`Processing ${file.name}`, { size: file.size, type: file.type });
     
     // Step 1: Extract text from PDF using pdfjs-dist
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = '';
     
-    console.log(`[parse-proposal] Extracting text from ${pdf.numPages} pages...`);
+    logger.info(`Extracting text from ${pdf.numPages} pages`);
     
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
@@ -116,25 +119,25 @@ export async function POST(request: NextRequest) {
       fullText += `--- Page ${i} ---\n${pageText}\n\n`;
     }
     
-    console.log(`[parse-proposal] Extracted ${fullText.length} characters with pdfjs-dist`);
-    console.log('[parse-proposal] First 500 chars of extracted text:', fullText.substring(0, 500));
+    logger.info(`Extracted ${fullText.length} characters with pdfjs-dist`);
+    logger.info('First 500 chars of extracted text', { text: fullText.substring(0, 500) });
     
     // If pdfjs-dist didn't get text, try pdf-parse as fallback
     if (!fullText.trim() || fullText.length < 100) {
-      console.log('[parse-proposal] Trying pdf-parse as fallback...');
+      logger.info('Trying pdf-parse as fallback');
       try {
         const pdfParse = (await import('pdf-parse')).default;
         const parsed = await pdfParse(Buffer.from(arrayBuffer));
         fullText = parsed.text || '';
-        console.log(`[parse-proposal] pdf-parse extracted ${fullText.length} characters`);
-        console.log('[parse-proposal] First 500 chars from pdf-parse:', fullText.substring(0, 500));
+        logger.info(`pdf-parse extracted ${fullText.length} characters`);
+        logger.info('First 500 chars from pdf-parse', { text: fullText.substring(0, 500) });
       } catch (e) {
-        console.error('[parse-proposal] pdf-parse also failed:', e);
+        logger.error('pdf-parse also failed', { error: e });
       }
     }
     
     if (!fullText.trim()) {
-      console.error('[parse-proposal] No text extracted from PDF');
+      logger.error('No text extracted from PDF');
       return NextResponse.json({ 
         error: 'No text found in PDF. The PDF may be a scanned image.',
         debug: {
@@ -145,7 +148,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Step 2: Send to OpenAI for field extraction
-    console.log('[parse-proposal] Sending to OpenAI for extraction...');
+    logger.info('Sending to OpenAI for extraction');
     
     const prompt = `You are analyzing a TCS floor service proposal/quote. Extract information and return ONLY valid JSON matching this structure:
 
@@ -181,13 +184,13 @@ ${fullText}`;
       response_format: { type: 'json_object' }
     });
     
-    console.log('[parse-proposal] OpenAI response received');
+    logger.info('OpenAI response received');
     const responseContent = completion.choices[0].message.content;
-    console.log('[parse-proposal] Response content:', responseContent);
-    console.log('[parse-proposal] Response length:', responseContent?.length || 0);
+    logger.info('Response content', { content: responseContent });
+    logger.info('Response length', { length: responseContent?.length || 0 });
     
     if (!responseContent) {
-      console.error('[parse-proposal] Empty response from OpenAI');
+      logger.error('Empty response from OpenAI');
       return NextResponse.json({ 
         error: 'Empty response from OpenAI',
         debug: { completion }
@@ -197,10 +200,10 @@ ${fullText}`;
     let extractedData;
     try {
       extractedData = JSON.parse(responseContent);
-      console.log('[parse-proposal] Successfully parsed JSON:', Object.keys(extractedData));
+      logger.info('Successfully parsed JSON', { keys: Object.keys(extractedData) });
     } catch (parseError: any) {
-      console.error('[parse-proposal] JSON parse error:', parseError);
-      console.error('[parse-proposal] Failed to parse response:', responseContent);
+      logger.error('JSON parse error', { error: parseError.message });
+      logger.error('Failed to parse response', { content: responseContent });
       return NextResponse.json({ 
         error: 'Failed to parse OpenAI response',
         debug: {
@@ -215,15 +218,19 @@ ${fullText}`;
     result.po_number = result.po_number || `PO-${Math.floor(100000 + Math.random() * 900000)}`;
     result.po_date = result.po_date || new Date().toISOString().split('T')[0];
     
-    console.log('[parse-proposal] Extraction complete, returning fields:', Object.keys(result));
-    console.log('[parse-proposal] Sample data - customer_company:', result.customer_company);
-    console.log('[parse-proposal] Sample data - square_footage:', result.square_footage);
+    logger.info('Extraction complete', { 
+      fields: Object.keys(result),
+      customer_company: result.customer_company,
+      square_footage: result.square_footage
+    });
     
     return NextResponse.json(result);
     
   } catch (error: any) {
-    console.error('[parse-proposal] Unhandled error:', error);
-    console.error('[parse-proposal] Error stack:', error.stack);
+    logger.error('Unhandled error', { 
+      error: error.message,
+      stack: error.stack
+    });
     return NextResponse.json({ 
       error: error.message || 'Failed to process PDF',
       debug: {

@@ -7,6 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Loader2, Upload, Download, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Logger } from '@/lib/logger';
+
+const logger = new Logger('po-builder');
 
 type FieldKey = 
   | 'po_date' | 'po_number' | 'customer_first_name' | 'customer_last_name'
@@ -73,7 +76,7 @@ export function POBuilder() {
     
     setIsUploading(true);
     try {
-      console.log('[po-builder] Starting file upload:', file.name, file.size, file.type);
+      logger.info('Starting file upload', { name: file.name, size: file.size, type: file.type });
       
       const formData = new FormData();
       formData.append('file', file);
@@ -83,32 +86,33 @@ export function POBuilder() {
         body: formData
       });
       
-      console.log('[po-builder] Response status:', response.status);
-      console.log('[po-builder] Response headers:', response.headers);
+      logger.info('Response received', { status: response.status });
       
       // Read response as text first to debug
       const text = await response.text();
-      console.log('[po-builder] Raw response:', text);
+      logger.info('Raw response', { text });
       
       let data;
       try {
         data = JSON.parse(text);
       } catch (parseError) {
-        console.error('[po-builder] Failed to parse response as JSON:', text);
+        logger.error('Failed to parse response as JSON', { text });
         throw new Error('Invalid response format from server');
       }
       
       if (!response.ok) {
-        console.error('[po-builder] Error response:', data);
+        logger.error('Error response from server', { data });
         throw new Error(data.error || 'Failed to parse PDF');
       }
       
-      console.log('[po-builder] Parsed data:', data);
+      logger.info('Successfully parsed data', { data });
       setFields(data);
       toast.success('PDF parsed successfully!');
     } catch (error: any) {
-      console.error('[po-builder] Upload error:', error);
-      console.error('[po-builder] Error details:', error.stack);
+      logger.error('Upload error', { 
+        message: error.message,
+        stack: error.stack
+      });
       toast.error(error.message || 'Failed to parse PDF');
     } finally {
       setIsUploading(false);
