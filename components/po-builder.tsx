@@ -81,6 +81,14 @@ export function POBuilder() {
       const formData = new FormData();
       formData.append('file', file);
       
+      // Test with simple endpoint first
+      const testResponse = await fetch('/api/simple-parse', {
+        method: 'POST',
+        body: formData
+      });
+      
+      console.log('[po-builder] Test response status:', testResponse.status);
+      
       // Temporarily use debug endpoint
       const response = await fetch('/api/parse-proposal-debug', {
         method: 'POST',

@@ -46,7 +46,25 @@ const FIELD_SCHEMA = {
   notes: ''
 };
 
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
+  // Add CORS headers
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+
   const debugInfo: any = {
     timestamp: new Date().toISOString(),
     steps: []
@@ -62,7 +80,7 @@ export async function POST(request: NextRequest) {
       debugInfo.error = 'No file uploaded';
       await ErrorReporter.report('parse-proposal-debug', new Error('No file uploaded'), debugInfo);
       await MemoryErrorStore.add('parse-proposal-debug', new Error('No file uploaded'), debugInfo);
-      return NextResponse.json({ error: 'No file uploaded', debug: debugInfo }, { status: 400 });
+      return NextResponse.json({ error: 'No file uploaded', debug: debugInfo }, { status: 400, headers });
     }
     
     debugInfo.file = { name: file.name, size: file.size, type: file.type };
