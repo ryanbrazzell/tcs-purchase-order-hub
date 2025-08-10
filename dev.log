@@ -1,0 +1,26 @@
+
+> tcs-purchase-order-hub@1.0.0 dev
+> next dev
+
+  ▲ Next.js 14.2.31
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 804ms
+ ✓ Compiled /api/parse-proposal in 162ms (56 modules)
+ POST /api/parse-proposal 200 in 198ms
+ ✓ Compiled in 859ms (73 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1178ms (517 modules)
+ POST /api/parse-proposal 404 in 1351ms
+ ✓ Compiled in 68ms (240 modules)
+ POST /api/parse-proposal 404 in 22ms
+ ✓ Compiled / in 124ms (528 modules)
+ HEAD / 307 in 188ms
+ ✓ Compiled in 203ms (641 modules)
+ ✓ Compiled in 57ms (239 modules)
+ ✓ Compiled /api/parse-proposal in 51ms (172 modules)
+ ✓ Compiled /_not-found in 40ms (594 modules)
+ POST /api/parse-proposal 404 in 185ms
+[?25h

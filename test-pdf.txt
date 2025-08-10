@@ -1,0 +1,26 @@
+PROPOSAL
+
+Ararat Convalescent Hospital
+1234 Main Street
+City, State 12345
+
+Service: Floor stripping and waxing
+Square Footage: 5,000 sq ft
+Unit Price: $0.55 per sq ft
+Subtotal: $2,750.00
+Tax: $220.00
+Total: $2,970.00
+
+Contact: John Smith
+Phone: (555) 123-4567
+Email: john@ararathosp.com
+
+Service Date Requested: March 15, 2024
+Timeline: 2 days
+
+Special Requirements:
+- Work must be done after 9 PM
+- Use low-odor products
+- All furniture must be returned to original position
+
+Thank you for your business!
