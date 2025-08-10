@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import PDFDocument from 'pdfkit';
+import jsPDF from 'jspdf';
 
 const FIELD_SCHEMA = {
   po_date: '',
@@ -36,90 +36,176 @@ export async function POST(request: NextRequest) {
     const fields = { ...FIELD_SCHEMA, ...body };
     
     // Create PDF document
-    const doc = new PDFDocument({ margin: 40 });
+    const doc = new jsPDF();
     
-    // Collect PDF chunks
-    const chunks: Buffer[] = [];
-    doc.on('data', (chunk) => chunks.push(chunk));
+    // Set font sizes and positions
+    let yPos = 20;
+    const leftMargin = 20;
+    const lineHeight = 7;
     
-    // Generate PDF content
-    doc.fontSize(20).text('TCS Floors', { align: 'center' });
-    doc.fontSize(16).text('Purchase Order', { align: 'center' }).moveDown();
+    // Header
+    doc.setFontSize(20);
+    doc.text('TCS FLOORS', 105, yPos, { align: 'center' });
+    yPos += 10;
+    doc.setFontSize(16);
+    doc.text('PURCHASE ORDER', 105, yPos, { align: 'center' });
+    yPos += 15;
     
-    // Header info
-    doc.fontSize(10);
-    doc.text(`Date: ${fields.po_date || ''}`);
-    doc.text(`PO #: ${fields.po_number || ''}`).moveDown();
+    // PO Info
+    doc.setFontSize(10);
+    doc.text(`Date: ${fields.po_date || new Date().toLocaleDateString()}`, leftMargin, yPos);
+    doc.text(`PO #: ${fields.po_number || 'DRAFT'}`, 150, yPos);
+    yPos += lineHeight * 2;
     
-    // Customer section
-    doc.fontSize(12).text('Customer Information', { underline: true }).moveDown(0.5);
-    doc.fontSize(10);
-    doc.text(`Name: ${[fields.customer_first_name, fields.customer_last_name].filter(Boolean).join(' ')}`);
-    doc.text(`Company: ${fields.customer_company}`);
-    doc.text(`Phone: ${fields.customer_phone}`);
-    doc.text(`Email: ${fields.customer_email}`);
-    doc.text(`Billing Address: ${fields.billing_address}`);
+    // Customer Information
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('CUSTOMER INFORMATION', leftMargin, yPos);
+    doc.setFont(undefined, 'normal');
+    yPos += lineHeight;
+    
+    doc.setFontSize(10);
+    const customerName = [fields.customer_first_name, fields.customer_last_name].filter(Boolean).join(' ');
+    if (customerName) {
+      doc.text(`Name: ${customerName}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
+    if (fields.customer_company) {
+      doc.text(`Company: ${fields.customer_company}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
+    if (fields.customer_phone) {
+      doc.text(`Phone: ${fields.customer_phone}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
+    if (fields.customer_email) {
+      doc.text(`Email: ${fields.customer_email}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
+    if (fields.billing_address) {
+      doc.text(`Billing Address: ${fields.billing_address}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
     
     const projectAddr = fields.project_address || [fields.city, fields.state, fields.zip].filter(Boolean).join(', ');
-    doc.text(`Project Address: ${projectAddr}`).moveDown();
+    if (projectAddr) {
+      doc.text(`Project Address: ${projectAddr}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
     
-    // Onsite contact
-    doc.text(`Onsite Contact: ${fields.onsite_contact_name}${fields.onsite_contact_phone ? ` (${fields.onsite_contact_phone})` : ''}`).moveDown();
+    if (fields.onsite_contact_name) {
+      doc.text(`Onsite Contact: ${fields.onsite_contact_name}${fields.onsite_contact_phone ? ` (${fields.onsite_contact_phone})` : ''}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
     
-    // Service details
-    doc.fontSize(12).text('Service Details', { underline: true }).moveDown(0.5);
-    doc.fontSize(10);
-    doc.text(`Service Type: ${fields.service_type}`);
-    doc.text(`Floor Type: ${fields.floor_type}`);
-    doc.text(`Square Footage: ${fields.square_footage}`);
-    doc.text(`Timeline: ${fields.timeline}`);
-    doc.text(`Requested Service Date: ${fields.requested_service_date}`).moveDown();
+    yPos += lineHeight;
+    
+    // Service Details
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('SERVICE DETAILS', leftMargin, yPos);
+    doc.setFont(undefined, 'normal');
+    yPos += lineHeight;
+    
+    doc.setFontSize(10);
+    if (fields.service_type) {
+      doc.text(`Service Type: ${fields.service_type}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
+    if (fields.floor_type) {
+      doc.text(`Floor Type: ${fields.floor_type}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
+    if (fields.square_footage) {
+      doc.text(`Square Footage: ${fields.square_footage}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
+    if (fields.timeline) {
+      doc.text(`Timeline: ${fields.timeline}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
+    if (fields.requested_service_date) {
+      doc.text(`Requested Service Date: ${fields.requested_service_date}`, leftMargin, yPos);
+      yPos += lineHeight;
+    }
+    
+    yPos += lineHeight;
     
     // Pricing
-    doc.fontSize(12).text('Pricing', { underline: true }).moveDown(0.5);
-    doc.fontSize(10);
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('PRICING', leftMargin, yPos);
+    doc.setFont(undefined, 'normal');
+    yPos += lineHeight;
+    
+    doc.setFontSize(10);
     if (fields.unit_price) {
-      doc.text(`Unit Price (per sq ft): $${fields.unit_price}`);
+      doc.text(`Unit Price (per sq ft): $${fields.unit_price}`, leftMargin, yPos);
+      yPos += lineHeight;
     }
     if (fields.subtotal) {
-      doc.text(`Subtotal: $${fields.subtotal}`);
+      doc.text(`Subtotal: $${fields.subtotal}`, leftMargin, yPos);
+      yPos += lineHeight;
     }
     if (fields.tax) {
-      doc.text(`Tax: $${fields.tax}`);
+      doc.text(`Tax: $${fields.tax}`, leftMargin, yPos);
+      yPos += lineHeight;
     }
-    doc.fontSize(12).text(`Total: $${fields.total || '0.00'}`, { underline: false }).moveDown();
+    
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text(`Total: $${fields.total || fields.subtotal || '0.00'}`, leftMargin, yPos);
+    doc.setFont(undefined, 'normal');
+    yPos += lineHeight * 2;
     
     // Additional info
     if (fields.special_requirements) {
-      doc.fontSize(12).text('Special Requirements', { underline: true }).moveDown(0.5);
-      doc.fontSize(10).text(fields.special_requirements).moveDown();
-    }
-    
-    if (fields.doc_reference) {
-      doc.text(`Reference: ${fields.doc_reference}`);
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text('SPECIAL REQUIREMENTS', leftMargin, yPos);
+      doc.setFont(undefined, 'normal');
+      yPos += lineHeight;
+      doc.setFontSize(10);
+      
+      // Wrap long text
+      const lines = doc.splitTextToSize(fields.special_requirements, 170);
+      lines.forEach((line: string) => {
+        doc.text(line, leftMargin, yPos);
+        yPos += lineHeight;
+      });
+      yPos += lineHeight;
     }
     
     if (fields.notes) {
-      doc.moveDown().fontSize(12).text('Notes', { underline: true }).moveDown(0.5);
-      doc.fontSize(10).text(fields.notes);
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text('NOTES', leftMargin, yPos);
+      doc.setFont(undefined, 'normal');
+      yPos += lineHeight;
+      doc.setFontSize(10);
+      
+      const lines = doc.splitTextToSize(fields.notes, 170);
+      lines.forEach((line: string) => {
+        doc.text(line, leftMargin, yPos);
+        yPos += lineHeight;
+      });
     }
     
     // Footer
-    doc.moveDown(2);
-    doc.fontSize(8).fillColor('#666666');
-    doc.text('This purchase order is subject to TCS Floors standard terms and conditions.', { align: 'center' });
-    doc.text('Thank you for your business!', { align: 'center' });
+    doc.setFontSize(8);
+    doc.setTextColor(102, 102, 102);
+    doc.text('This purchase order is subject to TCS Floors standard terms and conditions.', 105, 270, { align: 'center' });
+    doc.text('Thank you for your business!', 105, 275, { align: 'center' });
     
-    // Finalize PDF
-    doc.end();
+    if (fields.doc_reference) {
+      doc.text(`Reference: ${fields.doc_reference}`, 105, 280, { align: 'center' });
+    }
     
-    // Wait for PDF generation to complete
-    const pdfBuffer = await new Promise<Buffer>((resolve) => {
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-    });
+    // Get PDF as buffer
+    const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
     
     // Return PDF
-    return new NextResponse(pdfBuffer as any, {
+    return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="purchase-order-${fields.po_number || 'draft'}.pdf"`
