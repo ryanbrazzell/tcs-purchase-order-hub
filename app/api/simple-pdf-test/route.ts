@@ -67,31 +67,35 @@ export async function POST(request: NextRequest) {
       const mimeType = 'application/pdf';
       
       // Note: This will only work if OpenAI starts supporting PDFs in vision
-      const visionTest = await openai.chat.completions.create({
-        model: 'gpt-4-vision-preview',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'What type of document is this? Can you read any text from it?'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${mimeType};base64,${base64}`
+      let visionResult: any;
+      try {
+        const visionResponse = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'What type of document is this? Can you read any text from it?'
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${mimeType};base64,${base64}`
+                  }
                 }
-              }
-            ]
-          }
-        ],
-        max_tokens: 500
-      }).catch(e => ({ error: e.message }));
+              ]
+            }
+          ],
+          max_tokens: 500
+        });
+        visionResult = { success: true, response: visionResponse.choices[0]?.message?.content };
+      } catch (e: any) {
+        visionResult = { success: false, error: e.message };
+      }
       
-      results.methods.vision = visionTest.error ? 
-        { success: false, error: visionTest.error } : 
-        { success: true, response: visionTest.choices?.[0]?.message?.content };
+      results.methods.vision = visionResult;
     } catch (e: any) {
       results.methods.vision = {
         success: false,

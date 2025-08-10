@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
     const assistant = await openai.beta.assistants.create({
       name: 'PDF Reader',
       instructions: 'You are a helpful assistant that reads and analyzes PDF documents.',
-      model: 'gpt-4-turbo-preview',
-      tools: [{ type: 'retrieval' }]
+      model: 'gpt-4-turbo',
+      tools: [{ type: 'file_search' }]
     });
     
     // Create a thread and message
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const message = await openai.beta.threads.messages.create(thread.id, {
       role: 'user',
       content: 'Please read this PDF and provide a summary of its contents. What type of document is it and what are the key details?',
-      file_ids: [uploadedFile.id]
+      attachments: [{ file_id: uploadedFile.id, tools: [{ type: 'file_search' }] }]
     });
     
     // Run the assistant
@@ -57,14 +57,14 @@ export async function POST(request: NextRequest) {
     });
     
     // Wait for completion
-    let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+    let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id as any);
     while (runStatus.status !== 'completed') {
       await new Promise(resolve => setTimeout(resolve, 1000));
-      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id as any);
       console.log('[test-openai-file] Run status:', runStatus.status);
       
       if (runStatus.status === 'failed') {
-        throw new Error('Assistant run failed: ' + runStatus.last_error?.message);
+        throw new Error('Assistant run failed: ' + JSON.stringify(runStatus));
       }
     }
     
@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
     
     // Clean up
     try {
-      await openai.files.del(uploadedFile.id);
-      await openai.beta.assistants.del(assistant.id);
+      await openai.files.delete(uploadedFile.id);
+      await openai.beta.assistants.delete(assistant.id);
     } catch (e) {
       console.error('[test-openai-file] Cleanup error:', e);
     }
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       fileId: uploadedFile.id,
-      summary: assistantMessage?.content[0]?.text?.value || 'No response',
+      summary: (assistantMessage?.content[0] as any)?.text?.value || 'No response',
       rawResponse: assistantMessage
     });
     

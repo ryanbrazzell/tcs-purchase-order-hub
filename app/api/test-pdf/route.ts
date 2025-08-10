@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+
+// Polyfill for Node.js
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor() {}
+  } as any;
+}
 
 // Initialize PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
@@ -18,7 +25,7 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     
-    const analysis = {
+    const analysis: any = {
       fileName: file.name,
       fileSize: file.size,
       numPages: pdf.numPages,
@@ -52,7 +59,7 @@ export async function POST(request: NextRequest) {
       
       for (const item of textContent.items) {
         textItemCount++;
-        if (item.str) {
+        if ('str' in item && item.str) {
           totalChars += item.str.length;
           if (sampleText.length < 5) {
             sampleText.push(item.str);
@@ -65,7 +72,7 @@ export async function POST(request: NextRequest) {
       // Check for fonts
       const fonts = new Set();
       for (const item of textContent.items) {
-        if (item.fontName) {
+        if ('fontName' in item && item.fontName) {
           fonts.add(item.fontName);
         }
       }
