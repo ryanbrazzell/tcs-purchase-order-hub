@@ -59,9 +59,9 @@ export async function POST(request: NextRequest) {
     
     // Customer Information
     doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('CUSTOMER INFORMATION', leftMargin, yPos);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     yPos += lineHeight;
     
     doc.setFontSize(10);
@@ -102,9 +102,9 @@ export async function POST(request: NextRequest) {
     
     // Service Details
     doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('SERVICE DETAILS', leftMargin, yPos);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     yPos += lineHeight;
     
     doc.setFontSize(10);
@@ -133,9 +133,9 @@ export async function POST(request: NextRequest) {
     
     // Pricing
     doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('PRICING', leftMargin, yPos);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     yPos += lineHeight;
     
     doc.setFontSize(10);
@@ -153,17 +153,17 @@ export async function POST(request: NextRequest) {
     }
     
     doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text(`Total: $${fields.total || fields.subtotal || '0.00'}`, leftMargin, yPos);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     yPos += lineHeight * 2;
     
     // Additional info
     if (fields.special_requirements) {
       doc.setFontSize(12);
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text('SPECIAL REQUIREMENTS', leftMargin, yPos);
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
       yPos += lineHeight;
       doc.setFontSize(10);
       
@@ -178,9 +178,9 @@ export async function POST(request: NextRequest) {
     
     if (fields.notes) {
       doc.setFontSize(12);
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text('NOTES', leftMargin, yPos);
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
       yPos += lineHeight;
       doc.setFontSize(10);
       
