@@ -150,44 +150,50 @@ export async function POST(request: NextRequest) {
     // Step 2: Send to OpenAI for field extraction
     logger.info('Sending to OpenAI for extraction');
     
-    const prompt = `You are analyzing a TCS floor service proposal/quote. Extract information and return ONLY valid JSON matching this structure:
+    // Limit text to prevent token overflow
+    const maxTextLength = 4000; // Roughly 1000 tokens
+    const truncatedText = fullText.length > maxTextLength 
+      ? fullText.substring(0, maxTextLength) + '\n\n[... text truncated for length ...]'
+      : fullText;
+    
+    logger.info('Text length for OpenAI', { 
+      original: fullText.length, 
+      truncated: truncatedText.length 
+    });
+    
+    const prompt = `Extract information from this TCS floor service proposal and return ONLY a JSON object with these fields:
 
 ${JSON.stringify(FIELD_SCHEMA, null, 2)}
 
-Rules:
-- Return ONLY the JSON object, no other text
-- If a field is not found, use empty string ""
-- Extract phone numbers in format "123-456-7890"
-- Extract only numbers for square_footage (e.g., "8604")
-- Look for:
-  - Customer company name (the facility/organization receiving service)
-  - Contact names and phone numbers
-  - Job location/address
-  - Square footage of floor area
-  - Type of flooring (VCT, tile, etc)
-  - Service description (stripping, waxing, etc)
-  - Pricing information (subtotal, tax, total)
-  - Timeline or requested dates
-- For customer_company, look for facility names like "Hospital", "School", etc.
-- For addresses, combine street, city, state, zip into appropriate fields
+Focus on finding:
+- Customer/facility name (customer_company)
+- Square footage numbers
+- Service type (stripping, waxing, etc)
+- Pricing (subtotal, tax, total)
+- Addresses and contact info
 
 Document text:
-${fullText}`;
+${truncatedText}`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You are a data extraction expert. Return only valid JSON.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0,
-      response_format: { type: 'json_object' }
-    });
-    
-    logger.info('OpenAI response received');
-    const responseContent = completion.choices[0].message.content;
-    logger.info('Response content', { content: responseContent });
-    logger.info('Response length', { length: responseContent?.length || 0 });
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'Extract data from documents into JSON. Return ONLY valid JSON, no other text.' 
+          },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0,
+        max_tokens: 1000,
+        response_format: { type: 'json_object' }
+      });
+      
+      logger.info('OpenAI API call successful');
+      const responseContent = completion.choices[0]?.message?.content;
+      logger.info('Response content', { content: responseContent });
+      logger.info('Response length', { length: responseContent?.length || 0 });
     
     if (!responseContent) {
       logger.error('Empty response from OpenAI');
@@ -225,6 +231,22 @@ ${fullText}`;
     });
     
     return NextResponse.json(result);
+    
+    } catch (openAIError: any) {
+      logger.error('OpenAI API error', { 
+        error: openAIError.message,
+        response: openAIError.response?.data
+      });
+      
+      return NextResponse.json({ 
+        error: 'Failed to call OpenAI API',
+        debug: {
+          message: openAIError.message,
+          type: openAIError.constructor.name,
+          response: openAIError.response?.data
+        }
+      }, { status: 500 });
+    }
     
   } catch (error: any) {
     logger.error('Unhandled error', { 
