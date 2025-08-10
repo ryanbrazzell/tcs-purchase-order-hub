@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import OpenAI from 'openai';
+import { ErrorReporter } from '@/lib/error-reporter';
 
 // Polyfill for Node.js
 if (typeof globalThis.DOMMatrix === 'undefined') {
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
     
     if (!file) {
       debugInfo.error = 'No file uploaded';
+      await ErrorReporter.report('parse-proposal-debug', new Error('No file uploaded'), debugInfo);
       return NextResponse.json({ error: 'No file uploaded', debug: debugInfo }, { status: 400 });
     }
     
@@ -66,6 +68,7 @@ export async function POST(request: NextRequest) {
     
     if (!process.env.OPENAI_API_KEY) {
       debugInfo.error = 'OpenAI API key not configured';
+      await ErrorReporter.report('parse-proposal-debug', new Error('OpenAI API key not configured'), debugInfo);
       return NextResponse.json({ error: 'OpenAI API key not configured', debug: debugInfo }, { status: 500 });
     }
     
@@ -139,6 +142,7 @@ export async function POST(request: NextRequest) {
     
     if (!fullText.trim()) {
       debugInfo.error = 'No text extracted from PDF';
+      await ErrorReporter.report('parse-proposal-debug', new Error('No text extracted from PDF'), debugInfo);
       return NextResponse.json({ 
         error: 'No text found in PDF', 
         debug: debugInfo 
@@ -192,6 +196,7 @@ ${truncatedText}`;
       
       if (!responseContent) {
         debugInfo.error = 'Empty response from OpenAI';
+        await ErrorReporter.report('parse-proposal-debug', new Error('Empty response from OpenAI'), debugInfo);
         return NextResponse.json({ 
           error: 'Empty response from OpenAI',
           debug: debugInfo
@@ -207,6 +212,7 @@ ${truncatedText}`;
           message: parseError.message,
           responseContent: responseContent
         };
+        await ErrorReporter.report('parse-proposal-debug', parseError, debugInfo);
         return NextResponse.json({ 
           error: 'Failed to parse OpenAI response',
           debug: debugInfo
@@ -238,6 +244,8 @@ ${truncatedText}`;
         response: openAIError.response?.data
       };
       
+      await ErrorReporter.report('parse-proposal-debug', openAIError, debugInfo);
+      
       return NextResponse.json({ 
         error: 'Failed to call OpenAI API',
         debug: debugInfo
@@ -250,6 +258,8 @@ ${truncatedText}`;
       stack: error.stack,
       type: error.constructor.name
     };
+    
+    await ErrorReporter.report('parse-proposal-debug', error, debugInfo);
     
     return NextResponse.json({ 
       error: error.message || 'Failed to process PDF',

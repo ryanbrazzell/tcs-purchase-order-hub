@@ -44,3 +44,6 @@ next-env.d.ts
 
 # OS
 Thumbs.db
+
+# Error logs
+errors.json

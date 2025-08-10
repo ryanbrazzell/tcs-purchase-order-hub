@@ -130,6 +130,29 @@ export function POBuilder() {
         message: error.message,
         stack: error.stack
       });
+      
+      // Report error to server
+      try {
+        await fetch('/api/errors/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'po-builder-client',
+            error: {
+              message: error.message,
+              stack: error.stack
+            },
+            context: {
+              fileName: file.name,
+              fileSize: file.size,
+              fileType: file.type
+            }
+          })
+        });
+      } catch (e) {
+        // Ignore error reporting failures
+      }
+      
       toast.error(error.message || 'Failed to parse PDF');
     } finally {
       setIsUploading(false);
