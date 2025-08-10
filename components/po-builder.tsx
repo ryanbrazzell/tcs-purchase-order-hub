@@ -81,8 +81,8 @@ export function POBuilder() {
       const formData = new FormData();
       formData.append('file', file);
       
-      // Use the main parse-proposal endpoint
-      const response = await fetch('/api/parse-proposal', {
+      // Use the OpenAI file upload endpoint
+      const response = await fetch('/api/parse-proposal-openai', {
         method: 'POST',
         body: formData
       });
