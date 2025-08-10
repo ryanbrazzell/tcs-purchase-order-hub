@@ -232,9 +232,11 @@ ${truncatedText}`;
           .map(([key, value]) => `${key}: ${String(value).substring(0, 50)}`)
       };
       
+      // Always return debug info for now to diagnose issues
       return NextResponse.json({
         ...result,
-        _debug: debugInfo
+        _debug: debugInfo,
+        _debugMode: true
       });
       
     } catch (openAIError: any) {
