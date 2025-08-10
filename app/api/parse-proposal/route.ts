@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -49,6 +48,8 @@ export async function POST(request: NextRequest) {
     
     let extractedText = '';
     try {
+      // Dynamic import to avoid Vercel build issues
+      const pdfParse = (await import('pdf-parse')).default;
       const data = await pdfParse(buffer);
       extractedText = data.text || '';
       console.log(`Extracted ${extractedText.length} characters from PDF`);
