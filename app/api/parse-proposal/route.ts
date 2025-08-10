@@ -45,19 +45,23 @@ const FIELD_SCHEMA = {
 };
 
 export async function POST(request: NextRequest) {
+  console.log('[parse-proposal] Starting PDF parsing request');
+  
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
     if (!file) {
+      console.error('[parse-proposal] No file uploaded');
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
     
     if (!process.env.OPENAI_API_KEY) {
+      console.error('[parse-proposal] OpenAI API key not configured');
       return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
     }
     
-    console.log(`[parse-proposal] Processing ${file.name}`);
+    console.log(`[parse-proposal] Processing ${file.name} (${file.size} bytes, type: ${file.type})`);
     
     // Step 1: Extract text from PDF using pdfjs-dist
     const arrayBuffer = await file.arrayBuffer();
@@ -113,6 +117,7 @@ export async function POST(request: NextRequest) {
     }
     
     console.log(`[parse-proposal] Extracted ${fullText.length} characters with pdfjs-dist`);
+    console.log('[parse-proposal] First 500 chars of extracted text:', fullText.substring(0, 500));
     
     // If pdfjs-dist didn't get text, try pdf-parse as fallback
     if (!fullText.trim() || fullText.length < 100) {
@@ -122,14 +127,20 @@ export async function POST(request: NextRequest) {
         const parsed = await pdfParse(Buffer.from(arrayBuffer));
         fullText = parsed.text || '';
         console.log(`[parse-proposal] pdf-parse extracted ${fullText.length} characters`);
+        console.log('[parse-proposal] First 500 chars from pdf-parse:', fullText.substring(0, 500));
       } catch (e) {
         console.error('[parse-proposal] pdf-parse also failed:', e);
       }
     }
     
     if (!fullText.trim()) {
+      console.error('[parse-proposal] No text extracted from PDF');
       return NextResponse.json({ 
-        error: 'No text found in PDF. The PDF may be a scanned image.' 
+        error: 'No text found in PDF. The PDF may be a scanned image.',
+        debug: {
+          pdfPages: pdf.numPages,
+          textLength: fullText.length
+        }
       }, { status: 400 });
     }
     
@@ -170,20 +181,56 @@ ${fullText}`;
       response_format: { type: 'json_object' }
     });
     
-    const extractedData = JSON.parse(completion.choices[0].message.content || '{}');
+    console.log('[parse-proposal] OpenAI response received');
+    const responseContent = completion.choices[0].message.content;
+    console.log('[parse-proposal] Response content:', responseContent);
+    console.log('[parse-proposal] Response length:', responseContent?.length || 0);
+    
+    if (!responseContent) {
+      console.error('[parse-proposal] Empty response from OpenAI');
+      return NextResponse.json({ 
+        error: 'Empty response from OpenAI',
+        debug: { completion }
+      }, { status: 500 });
+    }
+    
+    let extractedData;
+    try {
+      extractedData = JSON.parse(responseContent);
+      console.log('[parse-proposal] Successfully parsed JSON:', Object.keys(extractedData));
+    } catch (parseError: any) {
+      console.error('[parse-proposal] JSON parse error:', parseError);
+      console.error('[parse-proposal] Failed to parse response:', responseContent);
+      return NextResponse.json({ 
+        error: 'Failed to parse OpenAI response',
+        debug: {
+          parseError: parseError.message,
+          responseContent: responseContent.substring(0, 500)
+        }
+      }, { status: 500 });
+    }
     
     // Ensure all fields exist and add defaults
     const result = { ...FIELD_SCHEMA, ...extractedData };
     result.po_number = result.po_number || `PO-${Math.floor(100000 + Math.random() * 900000)}`;
     result.po_date = result.po_date || new Date().toISOString().split('T')[0];
     
-    console.log('[parse-proposal] Extraction complete');
+    console.log('[parse-proposal] Extraction complete, returning fields:', Object.keys(result));
+    console.log('[parse-proposal] Sample data - customer_company:', result.customer_company);
+    console.log('[parse-proposal] Sample data - square_footage:', result.square_footage);
+    
     return NextResponse.json(result);
     
   } catch (error: any) {
-    console.error('[parse-proposal] Error:', error);
+    console.error('[parse-proposal] Unhandled error:', error);
+    console.error('[parse-proposal] Error stack:', error.stack);
     return NextResponse.json({ 
-      error: error.message || 'Failed to process PDF' 
+      error: error.message || 'Failed to process PDF',
+      debug: {
+        errorType: error.constructor.name,
+        errorMessage: error.message,
+        errorStack: error.stack?.split('\n').slice(0, 5)
+      }
     }, { status: 500 });
   }
 }

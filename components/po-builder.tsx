@@ -73,6 +73,8 @@ export function POBuilder() {
     
     setIsUploading(true);
     try {
+      console.log('[po-builder] Starting file upload:', file.name, file.size, file.type);
+      
       const formData = new FormData();
       formData.append('file', file);
       
@@ -81,16 +83,32 @@ export function POBuilder() {
         body: formData
       });
       
-      const data = await response.json();
+      console.log('[po-builder] Response status:', response.status);
+      console.log('[po-builder] Response headers:', response.headers);
+      
+      // Read response as text first to debug
+      const text = await response.text();
+      console.log('[po-builder] Raw response:', text);
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error('[po-builder] Failed to parse response as JSON:', text);
+        throw new Error('Invalid response format from server');
+      }
       
       if (!response.ok) {
+        console.error('[po-builder] Error response:', data);
         throw new Error(data.error || 'Failed to parse PDF');
       }
       
+      console.log('[po-builder] Parsed data:', data);
       setFields(data);
       toast.success('PDF parsed successfully!');
     } catch (error: any) {
-      console.error('Upload error:', error);
+      console.error('[po-builder] Upload error:', error);
+      console.error('[po-builder] Error details:', error.stack);
       toast.error(error.message || 'Failed to parse PDF');
     } finally {
       setIsUploading(false);
