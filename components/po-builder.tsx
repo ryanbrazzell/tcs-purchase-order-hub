@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Loader2, Upload, Download, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -15,7 +16,7 @@ type FieldKey =
   | 'po_date' | 'po_number' | 'customer_first_name' | 'customer_last_name'
   | 'customer_company' | 'onsite_contact_name' | 'onsite_contact_phone'
   | 'customer_phone' | 'customer_email' | 'billing_address' | 'project_address'
-  | 'city' | 'state' | 'zip' | 'service_type' | 'floor_type' | 'square_footage'
+  | 'city' | 'state' | 'zip' | 'service_type' | 'service_description' | 'floor_type' | 'square_footage'
   | 'unit_price' | 'subtotal' | 'tax' | 'total' | 'timeline'
   | 'requested_service_date' | 'special_requirements' | 'doc_reference' | 'notes';
 
@@ -37,6 +38,7 @@ const fieldLabels: Record<FieldKey, string> = {
   state: 'State',
   zip: 'ZIP Code',
   service_type: 'Service Type',
+  service_description: 'Service Description',
   floor_type: 'Floor Type',
   square_footage: 'Square Footage',
   unit_price: 'Unit Price (per sq ft)',
@@ -59,7 +61,7 @@ const fieldGroups = {
   'Addresses': ['billing_address', 'project_address', 'city', 'state', 'zip'] as FieldKey[],
   'Onsite Contact': ['onsite_contact_name', 'onsite_contact_phone'] as FieldKey[],
   'Service Information': [
-    'service_type', 'floor_type', 'square_footage', 'timeline', 'requested_service_date'
+    'service_type', 'service_description', 'floor_type', 'square_footage', 'timeline', 'requested_service_date'
   ] as FieldKey[],
   'Pricing': ['unit_price', 'subtotal', 'tax', 'total'] as FieldKey[],
   'Additional': ['special_requirements', 'notes'] as FieldKey[]
@@ -234,20 +236,35 @@ export function POBuilder() {
               <Card key={groupName} className="p-6">
                 <h2 className="text-lg font-semibold mb-4">{groupName}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {groupFields.map((key) => (
-                    <div key={key}>
-                      <Label htmlFor={key} className="text-sm text-gray-600">
-                        {fieldLabels[key]}
-                      </Label>
-                      <Input
-                        id={key}
-                        type={key.includes('date') ? 'date' : 'text'}
-                        value={fields[key] || ''}
-                        onChange={(e) => handleFieldChange(key, e.target.value)}
-                        className="mt-1"
-                      />
-                    </div>
-                  ))}
+                  {groupFields.map((key) => {
+                    const isLargeField = ['service_description', 'special_requirements', 'notes'].includes(key);
+                    const isFullWidth = isLargeField || key === 'billing_address' || key === 'project_address';
+                    
+                    return (
+                      <div key={key} className={isFullWidth ? 'md:col-span-2' : ''}>
+                        <Label htmlFor={key} className="text-sm font-medium text-gray-700">
+                          {fieldLabels[key]}
+                        </Label>
+                        {isLargeField ? (
+                          <Textarea
+                            id={key}
+                            value={fields[key] || ''}
+                            onChange={(e) => handleFieldChange(key, e.target.value)}
+                            className="mt-1 min-h-[100px] text-sm"
+                            placeholder={key === 'service_description' ? 'Describe the service in detail...' : ''}
+                          />
+                        ) : (
+                          <Input
+                            id={key}
+                            type={key.includes('date') ? 'date' : 'text'}
+                            value={fields[key] || ''}
+                            onChange={(e) => handleFieldChange(key, e.target.value)}
+                            className="mt-1 text-sm"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </Card>
             ))}

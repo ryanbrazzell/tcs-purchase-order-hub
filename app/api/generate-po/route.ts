@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 const FIELD_SCHEMA = {
   po_date: '',
@@ -17,6 +24,7 @@ const FIELD_SCHEMA = {
   state: '',
   zip: '',
   service_type: '',
+  service_description: '',
   floor_type: '',
   square_footage: '',
   unit_price: '',
@@ -27,7 +35,8 @@ const FIELD_SCHEMA = {
   requested_service_date: '',
   special_requirements: '',
   doc_reference: '',
-  notes: ''
+  notes: '',
+  line_items: [] as any[]
 };
 
 export async function POST(request: NextRequest) {
@@ -35,296 +44,329 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const fields = { ...FIELD_SCHEMA, ...body };
     
+    // Parse line items if provided as string
+    if (typeof fields.line_items === 'string') {
+      try {
+        fields.line_items = JSON.parse(fields.line_items);
+      } catch {
+        fields.line_items = [];
+      }
+    }
+    
     // Create PDF document
     const doc = new jsPDF();
     
     // Set margins and dimensions
     const pageWidth = doc.internal.pageSize.width;
-    const leftMargin = 25;
-    const rightMargin = pageWidth - 25;
-    const contentWidth = rightMargin - leftMargin;
-    let yPos = 30;
-    const lineHeight = 6;
-    const sectionSpacing = 10;
+    const pageHeight = doc.internal.pageSize.height;
+    const margin = 20;
+    let yPos = 20;
     
-    // Add subtle background for header
-    doc.setFillColor(245, 245, 245);
-    doc.rect(0, 0, pageWidth, 60, 'F');
+    // Company Header
+    doc.setFillColor(79, 70, 229); // Indigo color
+    doc.rect(0, 0, pageWidth, 40, 'F');
     
-    // Header - Company Name
-    doc.setFontSize(24);
+    // Company Name and Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
     doc.setFont('helvetica', 'bold');
-    doc.text('TCS FLOORS', pageWidth / 2, 25, { align: 'center' });
-    
-    // Header - Document Type
-    doc.setFontSize(18);
+    doc.text('TCS FLOORS', pageWidth / 2, 18, { align: 'center' });
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'normal');
-    doc.text('PURCHASE ORDER', pageWidth / 2, 40, { align: 'center' });
+    doc.text('PURCHASE ORDER', pageWidth / 2, 30, { align: 'center' });
     
-    // Draw header line
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.5);
-    doc.line(leftMargin, 50, rightMargin, 50);
+    // Reset text color
+    doc.setTextColor(0, 0, 0);
     
-    // PO Info - Date and Number
-    yPos = 65;
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Date: ${fields.po_date || new Date().toLocaleDateString()}`, leftMargin, yPos);
+    // PO Header Info Box
+    yPos = 50;
+    doc.setFillColor(249, 250, 251);
+    doc.rect(margin, yPos - 5, pageWidth - 2 * margin, 25, 'F');
+    
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text(`PO #: ${fields.po_number || 'DRAFT'}`, rightMargin - 60, yPos, { align: 'left' });
-    yPos += sectionSpacing;
+    doc.text('Date:', margin + 5, yPos + 5);
+    doc.text('PO Number:', pageWidth / 2, yPos + 5);
     
-    // Customer Information Section
-    doc.setFontSize(13);
-    doc.setFont('helvetica', 'bold');
-    doc.text('CUSTOMER INFORMATION', leftMargin, yPos);
-    yPos += lineHeight + 2;
-    
-    // Reset to normal text
-    doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
+    doc.text(fields.po_date || new Date().toLocaleDateString(), margin + 20, yPos + 5);
+    doc.text(fields.po_number || 'DRAFT', pageWidth / 2 + 30, yPos + 5);
     
-    // Customer details with better formatting
+    doc.setFont('helvetica', 'bold');
+    doc.text('Service Date:', margin + 5, yPos + 15);
+    doc.text('Reference:', pageWidth / 2, yPos + 15);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.text(fields.requested_service_date || 'TBD', margin + 35, yPos + 15);
+    doc.text(fields.doc_reference || 'N/A', pageWidth / 2 + 30, yPos + 15);
+    
+    yPos += 35;
+    
+    // Two-column layout for Customer and Job Site Information
+    const colWidth = (pageWidth - 3 * margin) / 2;
+    
+    // Customer Information (Left Column)
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('CUSTOMER INFORMATION', margin, yPos);
+    
+    // Job Site Information (Right Column)
+    doc.text('JOB SITE INFORMATION', margin + colWidth + margin, yPos);
+    yPos += 8;
+    
+    // Customer details
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const leftX = margin;
+    const rightX = margin + colWidth + margin;
+    let leftY = yPos;
+    let rightY = yPos;
+    
+    // Left column - Customer
     const customerName = [fields.customer_first_name, fields.customer_last_name].filter(Boolean).join(' ');
-    if (customerName) {
+    if (customerName || fields.customer_company) {
       doc.setFont('helvetica', 'bold');
-      doc.text('Name:', leftMargin, yPos);
+      doc.text('Company/Name:', leftX, leftY);
       doc.setFont('helvetica', 'normal');
-      doc.text(customerName, leftMargin + 45, yPos);
-      yPos += lineHeight;
-    }
-    
-    if (fields.customer_company) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Company:', leftMargin, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(fields.customer_company, leftMargin + 45, yPos);
-      yPos += lineHeight;
+      const custDisplay = fields.customer_company || customerName;
+      doc.text(custDisplay, leftX, leftY + 5, { maxWidth: colWidth - 10 });
+      if (fields.customer_company && customerName) {
+        doc.text(`Attn: ${customerName}`, leftX, leftY + 10, { maxWidth: colWidth - 10 });
+        leftY += 15;
+      } else {
+        leftY += 10;
+      }
     }
     
     if (fields.customer_phone) {
       doc.setFont('helvetica', 'bold');
-      doc.text('Phone:', leftMargin, yPos);
+      doc.text('Phone:', leftX, leftY);
       doc.setFont('helvetica', 'normal');
-      doc.text(fields.customer_phone, leftMargin + 45, yPos);
-      yPos += lineHeight;
+      doc.text(fields.customer_phone, leftX, leftY + 5);
+      leftY += 10;
     }
     
     if (fields.customer_email) {
       doc.setFont('helvetica', 'bold');
-      doc.text('Email:', leftMargin, yPos);
+      doc.text('Email:', leftX, leftY);
       doc.setFont('helvetica', 'normal');
-      doc.text(fields.customer_email, leftMargin + 45, yPos);
-      yPos += lineHeight;
+      doc.text(fields.customer_email, leftX, leftY + 5, { maxWidth: colWidth - 10 });
+      leftY += 10;
     }
     
     if (fields.billing_address) {
       doc.setFont('helvetica', 'bold');
-      doc.text('Billing Address:', leftMargin, yPos);
+      doc.text('Billing Address:', leftX, leftY);
       doc.setFont('helvetica', 'normal');
-      const billingAddr = `${fields.billing_address}${fields.city || fields.state || fields.zip ? ', ' : ''}${[fields.city, fields.state, fields.zip].filter(Boolean).join(', ')}`;
-      doc.text(billingAddr, leftMargin + 45, yPos);
-      yPos += lineHeight;
+      const billingLines = doc.splitTextToSize(
+        `${fields.billing_address}${fields.city || fields.state || fields.zip ? '\n' : ''}${[fields.city, fields.state, fields.zip].filter(Boolean).join(', ')}`,
+        colWidth - 10
+      );
+      billingLines.forEach((line: string, i: number) => {
+        doc.text(line, leftX, leftY + 5 + (i * 5));
+      });
+      leftY += 5 + (billingLines.length * 5);
     }
     
-    const projectAddr = fields.project_address || [fields.city, fields.state, fields.zip].filter(Boolean).join(', ');
-    if (projectAddr) {
+    // Right column - Job Site
+    if (fields.project_address) {
       doc.setFont('helvetica', 'bold');
-      doc.text('Project Address:', leftMargin, yPos);
+      doc.text('Project Address:', rightX, rightY);
       doc.setFont('helvetica', 'normal');
-      doc.text(projectAddr, leftMargin + 45, yPos);
-      yPos += lineHeight;
+      const projLines = doc.splitTextToSize(fields.project_address, colWidth - 10);
+      projLines.forEach((line: string, i: number) => {
+        doc.text(line, rightX, rightY + 5 + (i * 5));
+      });
+      rightY += 5 + (projLines.length * 5);
     }
     
     if (fields.onsite_contact_name) {
       doc.setFont('helvetica', 'bold');
-      doc.text('Onsite Contact:', leftMargin, yPos);
+      doc.text('Onsite Contact:', rightX, rightY);
       doc.setFont('helvetica', 'normal');
-      doc.text(`${fields.onsite_contact_name}${fields.onsite_contact_phone ? ` (${fields.onsite_contact_phone})` : ''}`, leftMargin + 45, yPos);
-      yPos += lineHeight;
-    }
-    
-    yPos += sectionSpacing;
-    
-    // Draw separator line
-    doc.setDrawColor(220, 220, 220);
-    doc.setLineWidth(0.2);
-    doc.line(leftMargin, yPos - 3, rightMargin, yPos - 3);
-    yPos += 5;
-    
-    // Service Details Section
-    doc.setFontSize(13);
-    doc.setFont('helvetica', 'bold');
-    doc.text('SERVICE DETAILS', leftMargin, yPos);
-    yPos += lineHeight + 2;
-    
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    
-    if (fields.service_type) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Service Type:', leftMargin, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(fields.service_type, leftMargin + 45, yPos);
-      yPos += lineHeight;
-    }
-    
-    if (fields.floor_type) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Floor Type:', leftMargin, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(fields.floor_type, leftMargin + 45, yPos);
-      yPos += lineHeight;
-    }
-    
-    if (fields.square_footage) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Square Footage:', leftMargin, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(fields.square_footage, leftMargin + 45, yPos);
-      yPos += lineHeight;
+      doc.text(fields.onsite_contact_name, rightX, rightY + 5);
+      if (fields.onsite_contact_phone) {
+        doc.text(fields.onsite_contact_phone, rightX, rightY + 10);
+        rightY += 15;
+      } else {
+        rightY += 10;
+      }
     }
     
     if (fields.timeline) {
       doc.setFont('helvetica', 'bold');
-      doc.text('Timeline:', leftMargin, yPos);
+      doc.text('Timeline:', rightX, rightY);
       doc.setFont('helvetica', 'normal');
-      doc.text(fields.timeline, leftMargin + 45, yPos);
-      yPos += lineHeight;
+      const timelineLines = doc.splitTextToSize(fields.timeline, colWidth - 10);
+      timelineLines.forEach((line: string, i: number) => {
+        doc.text(line, rightX, rightY + 5 + (i * 5));
+      });
+      rightY += 5 + (timelineLines.length * 5);
     }
     
-    if (fields.requested_service_date) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Service Date:', leftMargin, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(fields.requested_service_date, leftMargin + 45, yPos);
-      yPos += lineHeight;
-    }
+    yPos = Math.max(leftY, rightY) + 15;
     
-    yPos += sectionSpacing;
-    
-    // Draw separator line
-    doc.setDrawColor(220, 220, 220);
-    doc.line(leftMargin, yPos - 3, rightMargin, yPos - 3);
-    yPos += 5;
-    
-    // Pricing Section
-    doc.setFontSize(13);
+    // Service Description Section
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('PRICING', leftMargin, yPos);
-    yPos += lineHeight + 2;
+    doc.text('SERVICE DESCRIPTION', margin, yPos);
+    yPos += 8;
     
-    doc.setFontSize(11);
+    // Service description box
+    doc.setFillColor(249, 250, 251);
+    const descBoxHeight = fields.service_description ? Math.max(30, doc.splitTextToSize(fields.service_description, pageWidth - 2 * margin - 10).length * 5 + 10) : 30;
+    doc.rect(margin, yPos - 5, pageWidth - 2 * margin, descBoxHeight, 'F');
     
-    // Create pricing box
-    const priceBoxStart = yPos - 2;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
     
-    if (fields.unit_price) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Unit Price (per sq ft):', leftMargin, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`$${fields.unit_price}${fields.unit_price.includes('/') ? '' : '/sqft'}`, leftMargin + 60, yPos);
-      yPos += lineHeight;
+    if (fields.service_description) {
+      const descLines = doc.splitTextToSize(fields.service_description, pageWidth - 2 * margin - 10);
+      descLines.forEach((line: string, i: number) => {
+        doc.text(line, margin + 5, yPos + 2 + (i * 5));
+      });
+    } else {
+      doc.setTextColor(150, 150, 150);
+      doc.text('No service description provided', margin + 5, yPos + 2);
+      doc.setTextColor(0, 0, 0);
     }
+    
+    yPos += descBoxHeight + 10;
+    
+    // Line Items / Pricing Table
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PRICING DETAILS', margin, yPos);
+    yPos += 8;
+    
+    // Prepare line items data
+    const lineItems = fields.line_items && fields.line_items.length > 0 ? fields.line_items : [
+      {
+        description: fields.service_type || 'Floor Service',
+        details: `${fields.floor_type || ''} - ${fields.square_footage || '0'} sq ft`.trim(),
+        quantity: fields.square_footage || '1',
+        unit: 'sq ft',
+        unitPrice: fields.unit_price || '0.00',
+        total: fields.subtotal || '0.00'
+      }
+    ];
+    
+    // Create pricing table
+    (doc as any).autoTable({
+      startY: yPos,
+      head: [['Description', 'Quantity', 'Unit Price', 'Total']],
+      body: lineItems.map((item: any) => [
+        item.description + (item.details ? `\n${item.details}` : ''),
+        `${item.quantity} ${item.unit || ''}`.trim(),
+        `$${item.unitPrice}`,
+        `$${item.total}`
+      ]),
+      theme: 'striped',
+      headStyles: {
+        fillColor: [79, 70, 229],
+        textColor: 255,
+        fontSize: 10,
+        fontStyle: 'bold'
+      },
+      bodyStyles: {
+        fontSize: 10
+      },
+      columnStyles: {
+        0: { cellWidth: 80 },
+        1: { cellWidth: 40, halign: 'center' },
+        2: { cellWidth: 35, halign: 'right' },
+        3: { cellWidth: 35, halign: 'right' }
+      },
+      margin: { left: margin, right: margin }
+    });
+    
+    yPos = (doc as any).lastAutoTable.finalY + 5;
+    
+    // Totals section
+    const totalsX = pageWidth - margin - 80;
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
     
     if (fields.subtotal) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Subtotal:', leftMargin, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`$${fields.subtotal}`, leftMargin + 60, yPos);
-      yPos += lineHeight;
+      doc.text('Subtotal:', totalsX, yPos);
+      doc.text(`$${fields.subtotal}`, totalsX + 60, yPos, { align: 'right' });
+      yPos += 6;
     }
     
     if (fields.tax) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Tax:', leftMargin, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`$${fields.tax}`, leftMargin + 60, yPos);
-      yPos += lineHeight;
+      doc.text('Tax:', totalsX, yPos);
+      doc.text(`$${fields.tax}`, totalsX + 60, yPos, { align: 'right' });
+      yPos += 6;
     }
     
-    // Draw line above total
+    // Total line
     doc.setLineWidth(0.5);
-    doc.line(leftMargin, yPos, leftMargin + 100, yPos);
-    yPos += 3;
+    doc.line(totalsX, yPos - 2, totalsX + 60, yPos - 2);
     
-    // Total with emphasis
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Total:', leftMargin, yPos);
-    doc.text(`$${fields.total || fields.subtotal || '0.00'}`, leftMargin + 60, yPos);
+    doc.text('TOTAL:', totalsX, yPos + 5);
+    doc.text(`$${fields.total || fields.subtotal || '0.00'}`, totalsX + 60, yPos + 5, { align: 'right' });
     
-    // Box around pricing
+    yPos += 20;
+    
+    // Additional Notes Section
+    if (fields.special_requirements || fields.notes) {
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('ADDITIONAL INFORMATION', margin, yPos);
+      yPos += 8;
+      
+      // Combined notes box
+      const notesContent = [];
+      if (fields.special_requirements) {
+        notesContent.push('Special Requirements:', fields.special_requirements, '');
+      }
+      if (fields.notes) {
+        notesContent.push('Notes:', fields.notes);
+      }
+      
+      const notesText = notesContent.join('\n');
+      const notesLines = doc.splitTextToSize(notesText, pageWidth - 2 * margin - 10);
+      const notesBoxHeight = Math.max(40, notesLines.length * 5 + 10);
+      
+      doc.setFillColor(249, 250, 251);
+      doc.rect(margin, yPos - 5, pageWidth - 2 * margin, notesBoxHeight, 'F');
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      
+      let noteY = yPos;
+      notesLines.forEach((line: string) => {
+        if (line.includes('Special Requirements:') || line.includes('Notes:')) {
+          doc.setFont('helvetica', 'bold');
+        } else {
+          doc.setFont('helvetica', 'normal');
+        }
+        doc.text(line, margin + 5, noteY);
+        noteY += 5;
+      });
+    }
+    
+    // Footer
+    const footerY = pageHeight - 30;
+    
+    // Footer line
     doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.2);
-    doc.rect(leftMargin - 5, priceBoxStart, 110, yPos - priceBoxStart + 5);
-    
-    yPos += sectionSpacing + 5;
-    
-    // Additional info sections
-    if (fields.special_requirements) {
-      // Draw separator line
-      doc.setDrawColor(220, 220, 220);
-      doc.line(leftMargin, yPos - 3, rightMargin, yPos - 3);
-      yPos += 5;
-      
-      doc.setFontSize(13);
-      doc.setFont('helvetica', 'bold');
-      doc.text('SPECIAL REQUIREMENTS', leftMargin, yPos);
-      yPos += lineHeight + 2;
-      
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      
-      // Wrap long text
-      const lines = doc.splitTextToSize(fields.special_requirements, contentWidth);
-      lines.forEach((line: string) => {
-        doc.text(line, leftMargin, yPos);
-        yPos += lineHeight;
-      });
-      yPos += sectionSpacing;
-    }
-    
-    if (fields.notes) {
-      // Draw separator line
-      doc.setDrawColor(220, 220, 220);
-      doc.line(leftMargin, yPos - 3, rightMargin, yPos - 3);
-      yPos += 5;
-      
-      doc.setFontSize(13);
-      doc.setFont('helvetica', 'bold');
-      doc.text('NOTES', leftMargin, yPos);
-      yPos += lineHeight + 2;
-      
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      
-      const lines = doc.splitTextToSize(fields.notes, contentWidth);
-      lines.forEach((line: string) => {
-        doc.text(line, leftMargin, yPos);
-        yPos += lineHeight;
-      });
-    }
-    
-    // Footer - positioned at bottom
-    const footerY = 270;
-    
-    // Footer background
-    doc.setFillColor(250, 250, 250);
-    doc.rect(0, footerY - 10, pageWidth, 30, 'F');
+    doc.setLineWidth(0.5);
+    doc.line(margin, footerY - 10, pageWidth - margin, footerY - 10);
     
     // Footer text
     doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
     doc.setFont('helvetica', 'normal');
     doc.text('This purchase order is subject to TCS Floors standard terms and conditions.', pageWidth / 2, footerY, { align: 'center' });
-    doc.text('Thank you for your business!', pageWidth / 2, footerY + 6, { align: 'center' });
+    doc.text('Thank you for your business!', pageWidth / 2, footerY + 5, { align: 'center' });
     
-    if (fields.doc_reference) {
-      doc.setFont('helvetica', 'italic');
-      doc.text(`Reference: ${fields.doc_reference}`, pageWidth / 2, footerY + 12, { align: 'center' });
-    }
+    // Contact info
+    doc.setFontSize(8);
+    doc.text('TCS Floors | adminoffice@tcsfloors.com | 678-713-0677', pageWidth / 2, footerY + 12, { align: 'center' });
     
     // Get PDF as buffer
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
