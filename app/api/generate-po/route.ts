@@ -79,28 +79,28 @@ export async function POST(request: NextRequest) {
     doc.setTextColor(0, 0, 0);
     
     // PO Header Info Box
-    yPos = 50;
+    yPos = 55;
     doc.setFillColor(249, 250, 251);
-    doc.rect(margin, yPos - 5, pageWidth - 2 * margin, 25, 'F');
+    doc.rect(margin, yPos - 5, pageWidth - 2 * margin, 30, 'F');
     
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text('Date:', margin + 5, yPos + 5);
-    doc.text('PO Number:', pageWidth / 2, yPos + 5);
+    doc.text('Date:', margin + 5, yPos + 6);
+    doc.text('PO Number:', pageWidth / 2, yPos + 6);
     
     doc.setFont('helvetica', 'normal');
-    doc.text(fields.po_date || new Date().toLocaleDateString(), margin + 20, yPos + 5);
-    doc.text(fields.po_number || 'DRAFT', pageWidth / 2 + 30, yPos + 5);
+    doc.text(fields.po_date || new Date().toLocaleDateString(), margin + 25, yPos + 6);
+    doc.text(fields.po_number || 'DRAFT', pageWidth / 2 + 35, yPos + 6);
     
     doc.setFont('helvetica', 'bold');
-    doc.text('Service Date:', margin + 5, yPos + 15);
-    doc.text('Reference:', pageWidth / 2, yPos + 15);
+    doc.text('Service Date:', margin + 5, yPos + 18);
+    doc.text('Reference:', pageWidth / 2, yPos + 18);
     
     doc.setFont('helvetica', 'normal');
-    doc.text(fields.requested_service_date || 'TBD', margin + 35, yPos + 15);
-    doc.text(fields.doc_reference || 'N/A', pageWidth / 2 + 30, yPos + 15);
+    doc.text(fields.requested_service_date || 'TBD', margin + 40, yPos + 18);
+    doc.text(fields.doc_reference || 'N/A', pageWidth / 2 + 35, yPos + 18);
     
-    yPos += 35;
+    yPos += 45;
     
     // Two-column layout for Customer and Job Site Information
     const colWidth = (pageWidth - 3 * margin) / 2;
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     
     // Job Site Information (Right Column)
     doc.text('JOB SITE INFORMATION', margin + colWidth + margin, yPos);
-    yPos += 8;
+    yPos += 12;
     
     // Customer details
     doc.setFontSize(10);
@@ -129,12 +129,12 @@ export async function POST(request: NextRequest) {
       doc.text('Company/Name:', leftX, leftY);
       doc.setFont('helvetica', 'normal');
       const custDisplay = fields.customer_company || customerName;
-      doc.text(custDisplay, leftX, leftY + 5, { maxWidth: colWidth - 10 });
+      doc.text(custDisplay, leftX, leftY + 6, { maxWidth: colWidth - 10 });
       if (fields.customer_company && customerName) {
-        doc.text(`Attn: ${customerName}`, leftX, leftY + 10, { maxWidth: colWidth - 10 });
-        leftY += 15;
+        doc.text(`Attn: ${customerName}`, leftX, leftY + 12, { maxWidth: colWidth - 10 });
+        leftY += 20;
       } else {
-        leftY += 10;
+        leftY += 14;
       }
     }
     
@@ -142,16 +142,16 @@ export async function POST(request: NextRequest) {
       doc.setFont('helvetica', 'bold');
       doc.text('Phone:', leftX, leftY);
       doc.setFont('helvetica', 'normal');
-      doc.text(fields.customer_phone, leftX, leftY + 5);
-      leftY += 10;
+      doc.text(fields.customer_phone, leftX, leftY + 6);
+      leftY += 14;
     }
     
     if (fields.customer_email) {
       doc.setFont('helvetica', 'bold');
       doc.text('Email:', leftX, leftY);
       doc.setFont('helvetica', 'normal');
-      doc.text(fields.customer_email, leftX, leftY + 5, { maxWidth: colWidth - 10 });
-      leftY += 10;
+      doc.text(fields.customer_email, leftX, leftY + 6, { maxWidth: colWidth - 10 });
+      leftY += 14;
     }
     
     if (fields.billing_address) {
@@ -163,9 +163,9 @@ export async function POST(request: NextRequest) {
         colWidth - 10
       );
       billingLines.forEach((line: string, i: number) => {
-        doc.text(line, leftX, leftY + 5 + (i * 5));
+        doc.text(line, leftX, leftY + 6 + (i * 6));
       });
-      leftY += 5 + (billingLines.length * 5);
+      leftY += 6 + (billingLines.length * 6) + 4;
     }
     
     // Right column - Job Site
@@ -175,21 +175,21 @@ export async function POST(request: NextRequest) {
       doc.setFont('helvetica', 'normal');
       const projLines = doc.splitTextToSize(fields.project_address, colWidth - 10);
       projLines.forEach((line: string, i: number) => {
-        doc.text(line, rightX, rightY + 5 + (i * 5));
+        doc.text(line, rightX, rightY + 6 + (i * 6));
       });
-      rightY += 5 + (projLines.length * 5);
+      rightY += 6 + (projLines.length * 6) + 4;
     }
     
     if (fields.onsite_contact_name) {
       doc.setFont('helvetica', 'bold');
       doc.text('Onsite Contact:', rightX, rightY);
       doc.setFont('helvetica', 'normal');
-      doc.text(fields.onsite_contact_name, rightX, rightY + 5);
+      doc.text(fields.onsite_contact_name, rightX, rightY + 6);
       if (fields.onsite_contact_phone) {
-        doc.text(fields.onsite_contact_phone, rightX, rightY + 10);
-        rightY += 15;
+        doc.text(fields.onsite_contact_phone, rightX, rightY + 12);
+        rightY += 20;
       } else {
-        rightY += 10;
+        rightY += 14;
       }
     }
     
@@ -199,45 +199,45 @@ export async function POST(request: NextRequest) {
       doc.setFont('helvetica', 'normal');
       const timelineLines = doc.splitTextToSize(fields.timeline, colWidth - 10);
       timelineLines.forEach((line: string, i: number) => {
-        doc.text(line, rightX, rightY + 5 + (i * 5));
+        doc.text(line, rightX, rightY + 6 + (i * 6));
       });
-      rightY += 5 + (timelineLines.length * 5);
+      rightY += 6 + (timelineLines.length * 6);
     }
     
-    yPos = Math.max(leftY, rightY) + 15;
+    yPos = Math.max(leftY, rightY) + 20;
     
     // Service Description Section
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('SERVICE DESCRIPTION', margin, yPos);
-    yPos += 8;
+    yPos += 12;
     
     // Service description box
     doc.setFillColor(249, 250, 251);
-    const descBoxHeight = fields.service_description ? Math.max(30, doc.splitTextToSize(fields.service_description, pageWidth - 2 * margin - 10).length * 5 + 10) : 30;
+    const descBoxHeight = fields.service_description ? Math.max(35, doc.splitTextToSize(fields.service_description, pageWidth - 2 * margin - 20).length * 6 + 15) : 35;
     doc.rect(margin, yPos - 5, pageWidth - 2 * margin, descBoxHeight, 'F');
     
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     
     if (fields.service_description) {
-      const descLines = doc.splitTextToSize(fields.service_description, pageWidth - 2 * margin - 10);
+      const descLines = doc.splitTextToSize(fields.service_description, pageWidth - 2 * margin - 20);
       descLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + 2 + (i * 5));
+        doc.text(line, margin + 10, yPos + 5 + (i * 6));
       });
     } else {
       doc.setTextColor(150, 150, 150);
-      doc.text('No service description provided', margin + 5, yPos + 2);
+      doc.text('No service description provided', margin + 10, yPos + 5);
       doc.setTextColor(0, 0, 0);
     }
     
-    yPos += descBoxHeight + 10;
+    yPos += descBoxHeight + 15;
     
     // Line Items / Pricing Table
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('PRICING DETAILS', margin, yPos);
-    yPos += 8;
+    yPos += 12;
     
     // Prepare line items data
     const lineItems = fields.line_items && fields.line_items.length > 0 ? fields.line_items : [
@@ -280,7 +280,7 @@ export async function POST(request: NextRequest) {
       margin: { left: margin, right: margin }
     });
     
-    yPos = (doc as any).lastAutoTable.finalY + 5;
+    yPos = (doc as any).lastAutoTable.finalY + 15;
     
     // Totals section
     const totalsX = pageWidth - margin - 80;
@@ -312,7 +312,7 @@ export async function POST(request: NextRequest) {
     const totalAmount = String(fields.total || fields.subtotal || '0.00').replace(/[$,]/g, '');
     doc.text(`$${totalAmount}`, totalsX + 60, yPos + 5, { align: 'right' });
     
-    yPos += 25;
+    yPos += 30;
     
     // Additional Notes Section
     if (fields.special_requirements || fields.notes) {
@@ -326,7 +326,7 @@ export async function POST(request: NextRequest) {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text('ADDITIONAL INFORMATION', margin, yPos);
-      yPos += 8;
+      yPos += 12;
       
       // Combined notes box
       const notesContent = [];
@@ -339,7 +339,7 @@ export async function POST(request: NextRequest) {
       
       const notesText = notesContent.join('\n');
       const notesLines = doc.splitTextToSize(notesText, pageWidth - 2 * margin - 10);
-      const notesBoxHeight = Math.max(40, notesLines.length * 5 + 10);
+      const notesBoxHeight = Math.max(50, notesLines.length * 6 + 20);
       
       doc.setFillColor(249, 250, 251);
       doc.rect(margin, yPos - 5, pageWidth - 2 * margin, notesBoxHeight, 'F');
@@ -347,18 +347,19 @@ export async function POST(request: NextRequest) {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       
-      let noteY = yPos;
+      let noteY = yPos + 5;
       notesLines.forEach((line: string) => {
         if (line.includes('Special Requirements:') || line.includes('Notes:')) {
           doc.setFont('helvetica', 'bold');
+          if (noteY > yPos + 5) noteY += 4; // Extra space before new section
         } else {
           doc.setFont('helvetica', 'normal');
         }
-        doc.text(line, margin + 5, noteY);
-        noteY += 5;
+        doc.text(line, margin + 10, noteY);
+        noteY += 6;
       });
       
-      yPos = noteY + 10;
+      yPos = noteY + 15;
     }
     
     // Footer - Dynamic positioning
