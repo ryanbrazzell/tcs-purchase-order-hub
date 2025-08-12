@@ -224,133 +224,163 @@ export function POBuilder() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          TCS Purchase Order Builder
-        </h1>
-        <p className="text-gray-600">
-          Upload a proposal PDF to extract information and generate a purchase order
-        </p>
-      </div>
-
-      {/* Upload Section */}
-      <Card className="p-6">
-        <div className="space-y-4">
-          {!fields && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                <strong>No draft found.</strong> Upload a PDF proposal to extract data and start creating a purchase order.
-              </p>
-            </div>
-          )}
-          <div className="flex items-center gap-4">
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="flex-1"
-          />
-          <Button
-            onClick={handleUpload}
-            disabled={!file || isUploading}
-            className="min-w-[120px]"
-          >
-            {isUploading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Parsing...
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4 mr-2" />
-                Parse PDF
-              </>
-            )}
-          </Button>
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+      <div className="max-w-6xl mx-auto p-6 space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-4 animate-in">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
+            Purchase Order Builder
+          </h1>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Upload a proposal PDF to extract information and generate a professional purchase order
+          </p>
         </div>
-        </div>
-      </Card>
 
-      {/* Fields Editor */}
-      {fields && (
-        <>
-          {/* Draft Actions */}
-          <div className="flex justify-between items-center mb-4">
-            <p className="text-sm text-gray-600">
-              Draft auto-saved • Last updated: {new Date().toLocaleTimeString()}
-            </p>
-            <Button
-              onClick={clearDraft}
-              variant="outline"
-              size="sm"
-            >
-              Clear Draft
-            </Button>
-          </div>
-          
+        {/* Upload Section */}
+        <Card className="p-8 border-0 shadow-lg bg-gradient-to-br from-card to-card/95">
           <div className="space-y-6">
-            {Object.entries(fieldGroups).map(([groupName, groupFields]) => (
-              <Card key={groupName} className="p-6">
-                <h2 className="text-lg font-semibold mb-4">{groupName}</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {!fields && (
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 text-center">
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FileText className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="font-semibold text-lg mb-2">Get Started</h3>
+                <p className="text-muted-foreground">
+                  Upload a PDF proposal to automatically extract data and create your purchase order
+                </p>
+              </div>
+            )}
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="flex-1 w-full">
+                <label htmlFor="file-upload" className="block">
+                  <div className="border-2 border-dashed border-input rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
+                    <input
+                      id="file-upload"
+                      type="file"
+                      accept="application/pdf"
+                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                      className="sr-only"
+                    />
+                    <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm font-medium">
+                      {file ? file.name : 'Click to upload or drag and drop'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      PDF files only
+                    </p>
+                  </div>
+                </label>
+              </div>
+              <Button
+                onClick={handleUpload}
+                disabled={!file || isUploading}
+                size="lg"
+                className="min-w-[140px] shadow-md"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Parsing...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Parse PDF
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Fields Editor */}
+        {fields && (
+          <div className="space-y-6 animate-in">
+            {/* Draft Actions */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-muted/50 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
+                <p className="text-sm text-muted-foreground">
+                  Draft auto-saved • Last updated: {new Date().toLocaleTimeString()}
+                </p>
+              </div>
+              <Button
+                onClick={clearDraft}
+                variant="outline"
+                size="sm"
+                className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50"
+              >
+                Clear Draft
+              </Button>
+            </div>
+          
+            {/* Field Groups */}
+            <div className="space-y-6">
+              {Object.entries(fieldGroups).map(([groupName, groupFields]) => (
+                <Card key={groupName} className="p-6 shadow-sm hover:shadow-md transition-shadow border-0">
+                  <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
+                    <div className="w-1 h-6 bg-primary rounded-full" />
+                    {groupName}
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {groupFields.map((key) => {
                     const isLargeField = ['service_description', 'special_requirements', 'notes'].includes(key);
                     const isFullWidth = isLargeField || key === 'billing_address' || key === 'project_address';
                     
-                    return (
-                      <div key={key} className={isFullWidth ? 'md:col-span-2' : ''}>
-                        <Label htmlFor={key} className="text-sm font-medium text-gray-700">
-                          {fieldLabels[key]}
-                        </Label>
-                        {isLargeField ? (
-                          <Textarea
-                            id={key}
-                            value={fields[key] || ''}
-                            onChange={(e) => handleFieldChange(key, e.target.value)}
-                            className="mt-1 min-h-[100px] text-sm"
-                            placeholder={key === 'service_description' ? 'Describe the service in detail...' : ''}
-                          />
-                        ) : (
-                          <Input
-                            id={key}
-                            type={key.includes('date') ? 'date' : 'text'}
-                            value={fields[key] || ''}
-                            onChange={(e) => handleFieldChange(key, e.target.value)}
-                            className="mt-1 text-sm"
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-            ))}
-          </div>
+                      return (
+                        <div key={key} className={`space-y-2 ${isFullWidth ? 'md:col-span-2' : ''}`}>
+                          <Label htmlFor={key} className="text-sm font-medium">
+                            {fieldLabels[key]}
+                          </Label>
+                          {isLargeField ? (
+                            <Textarea
+                              id={key}
+                              value={fields[key] || ''}
+                              onChange={(e) => handleFieldChange(key, e.target.value)}
+                              className="min-h-[100px] text-sm"
+                              placeholder={key === 'service_description' ? 'Describe the service in detail...' : ''}
+                            />
+                          ) : (
+                            <Input
+                              id={key}
+                              type={key.includes('date') ? 'date' : 'text'}
+                              value={fields[key] || ''}
+                              onChange={(e) => handleFieldChange(key, e.target.value)}
+                              className="text-sm"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              ))}
+            </div>
 
-          {/* Generate Button */}
-          <div className="flex justify-center">
-            <Button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              size="lg"
-              className="min-w-[200px]"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4 mr-2" />
-                  Generate PO PDF
-                </>
-              )}
-            </Button>
+            {/* Generate Button */}
+            <div className="flex justify-center py-8">
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                size="lg"
+                className="min-w-[220px] shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Generating PDF...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-5 h-5 mr-2" />
+                    Generate Purchase Order
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
