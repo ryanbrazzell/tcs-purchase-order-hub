@@ -243,11 +243,11 @@ export async function POST(request: NextRequest) {
     const lineItems = fields.line_items && fields.line_items.length > 0 ? fields.line_items : [
       {
         description: fields.service_type || 'Floor Service',
-        details: `${fields.floor_type || ''} - ${fields.square_footage || '0'} sq ft`.trim(),
+        details: `${fields.floor_type || ''} - ${fields.square_footage || '0'} sqft`.trim(),
         quantity: fields.square_footage || '1',
-        unit: 'sq ft',
-        unitPrice: fields.unit_price || '0.00',
-        total: fields.subtotal || '0.00'
+        unit: 'sqft',
+        unitPrice: String(fields.unit_price || '0.00').replace(/[$,]/g, ''),
+        total: String(fields.subtotal || '0.00').replace(/[$,]/g, '')
       }
     ];
     
@@ -258,8 +258,8 @@ export async function POST(request: NextRequest) {
       body: lineItems.map((item: any) => [
         item.description + (item.details ? `\n${item.details}` : ''),
         `${item.quantity} ${item.unit || ''}`.trim(),
-        `$${item.unitPrice}`,
-        `$${item.total}`
+        `$${String(item.unitPrice).replace(/[$,]/g, '')}`,
+        `$${String(item.total).replace(/[$,]/g, '')}`
       ]),
       theme: 'striped',
       headStyles: {
@@ -290,13 +290,15 @@ export async function POST(request: NextRequest) {
     
     if (fields.subtotal) {
       doc.text('Subtotal:', totalsX, yPos);
-      doc.text(`$${fields.subtotal}`, totalsX + 60, yPos, { align: 'right' });
+      const subtotalAmount = String(fields.subtotal || '0.00').replace(/[$,]/g, '');
+      doc.text(`$${subtotalAmount}`, totalsX + 60, yPos, { align: 'right' });
       yPos += 6;
     }
     
     if (fields.tax) {
       doc.text('Tax:', totalsX, yPos);
-      doc.text(`$${fields.tax}`, totalsX + 60, yPos, { align: 'right' });
+      const taxAmount = String(fields.tax || '0.00').replace(/[$,]/g, '');
+      doc.text(`$${taxAmount}`, totalsX + 60, yPos, { align: 'right' });
       yPos += 6;
     }
     
@@ -307,12 +309,20 @@ export async function POST(request: NextRequest) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('TOTAL:', totalsX, yPos + 5);
-    doc.text(`$${fields.total || fields.subtotal || '0.00'}`, totalsX + 60, yPos + 5, { align: 'right' });
+    const totalAmount = String(fields.total || fields.subtotal || '0.00').replace(/[$,]/g, '');
+    doc.text(`$${totalAmount}`, totalsX + 60, yPos + 5, { align: 'right' });
     
-    yPos += 20;
+    yPos += 25;
     
     // Additional Notes Section
     if (fields.special_requirements || fields.notes) {
+      // Check if we have enough space for notes section
+      const estimatedNotesHeight = 60; // Estimate
+      if (yPos + estimatedNotesHeight > pageHeight - 40) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text('ADDITIONAL INFORMATION', margin, yPos);
@@ -347,26 +357,38 @@ export async function POST(request: NextRequest) {
         doc.text(line, margin + 5, noteY);
         noteY += 5;
       });
+      
+      yPos = noteY + 10;
     }
     
-    // Footer
-    const footerY = pageHeight - 30;
+    // Footer - Dynamic positioning
+    const footerHeight = 35;
+    let footerY;
+    
+    // Calculate where footer should go
+    if (yPos + footerHeight > pageHeight - 20) {
+      // Not enough space, use bottom of page
+      footerY = pageHeight - footerHeight;
+    } else {
+      // Place footer after content with some spacing
+      footerY = Math.max(yPos + 20, pageHeight - footerHeight);
+    }
     
     // Footer line
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.5);
-    doc.line(margin, footerY - 10, pageWidth - margin, footerY - 10);
+    doc.line(margin, footerY, pageWidth - margin, footerY);
     
     // Footer text
     doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
     doc.setFont('helvetica', 'normal');
-    doc.text('This purchase order is subject to TCS Floors standard terms and conditions.', pageWidth / 2, footerY, { align: 'center' });
-    doc.text('Thank you for your business!', pageWidth / 2, footerY + 5, { align: 'center' });
+    doc.text('This purchase order is subject to TCS Floors standard terms and conditions.', pageWidth / 2, footerY + 10, { align: 'center' });
+    doc.text('Thank you for your business!', pageWidth / 2, footerY + 16, { align: 'center' });
     
     // Contact info
     doc.setFontSize(8);
-    doc.text('TCS Floors | adminoffice@tcsfloors.com | 678-713-0677', pageWidth / 2, footerY + 12, { align: 'center' });
+    doc.text('TCS Floors | adminoffice@tcsfloors.com | 678-713-0677', pageWidth / 2, footerY + 24, { align: 'center' });
     
     // Get PDF as buffer
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
