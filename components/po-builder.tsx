@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,11 +67,38 @@ const fieldGroups = {
   'Additional': ['special_requirements', 'notes'] as FieldKey[]
 };
 
+const DRAFT_STORAGE_KEY = 'tcs-po-draft';
+
 export function POBuilder() {
   const [fields, setFields] = useState<POFields | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Load draft on component mount
+  useEffect(() => {
+    try {
+      const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (savedDraft) {
+        const draft = JSON.parse(savedDraft);
+        setFields(draft);
+        toast.success('Draft loaded from previous session');
+      }
+    } catch (error) {
+      console.error('Failed to load draft:', error);
+    }
+  }, []);
+  
+  // Save draft whenever fields change
+  useEffect(() => {
+    if (fields) {
+      try {
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(fields));
+      } catch (error) {
+        console.error('Failed to save draft:', error);
+      }
+    }
+  }, [fields]);
 
   const handleUpload = async () => {
     if (!file) return;
@@ -156,6 +183,14 @@ export function POBuilder() {
   const handleFieldChange = (key: FieldKey, value: string) => {
     setFields(prev => prev ? { ...prev, [key]: value } : null);
   };
+  
+  const clearDraft = useCallback(() => {
+    if (window.confirm('Are you sure you want to clear all fields?')) {
+      setFields(null);
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      toast.success('Draft cleared');
+    }
+  }, []);
 
   const handleGenerate = async () => {
     if (!fields) return;
@@ -201,7 +236,15 @@ export function POBuilder() {
 
       {/* Upload Section */}
       <Card className="p-6">
-        <div className="flex items-center gap-4">
+        <div className="space-y-4">
+          {!fields && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                <strong>No draft found.</strong> Upload a PDF proposal to extract data and start creating a purchase order.
+              </p>
+            </div>
+          )}
+          <div className="flex items-center gap-4">
           <input
             type="file"
             accept="application/pdf"
@@ -226,11 +269,26 @@ export function POBuilder() {
             )}
           </Button>
         </div>
+        </div>
       </Card>
 
       {/* Fields Editor */}
       {fields && (
         <>
+          {/* Draft Actions */}
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-sm text-gray-600">
+              Draft auto-saved • Last updated: {new Date().toLocaleTimeString()}
+            </p>
+            <Button
+              onClick={clearDraft}
+              variant="outline"
+              size="sm"
+            >
+              Clear Draft
+            </Button>
+          </div>
+          
           <div className="space-y-6">
             {Object.entries(fieldGroups).map(([groupName, groupFields]) => (
               <Card key={groupName} className="p-6">
