@@ -68,31 +68,35 @@ export async function POST(request: NextRequest) {
       
       // Note: This will only work if OpenAI starts supporting PDFs in vision
       let visionResult: any;
-      try {
-        const visionResponse = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'What type of document is this? Can you read any text from it?'
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:${mimeType};base64,${base64}`
+      if (openai) {
+        try {
+          const visionResponse = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'What type of document is this? Can you read any text from it?'
+                  },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${mimeType};base64,${base64}`
+                    }
                   }
-                }
-              ]
-            }
-          ],
-          max_tokens: 500
-        });
-        visionResult = { success: true, response: visionResponse.choices[0]?.message?.content };
-      } catch (e: any) {
-        visionResult = { success: false, error: e.message };
+                ]
+              }
+            ],
+            max_tokens: 500
+          });
+          visionResult = { success: true, response: visionResponse.choices[0]?.message?.content };
+        } catch (e: any) {
+          visionResult = { success: false, error: e.message };
+        }
+      } else {
+        visionResult = { success: false, error: 'OpenAI not configured' };
       }
       
       results.methods.vision = visionResult;
