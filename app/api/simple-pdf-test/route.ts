@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       };
       
       // If we got text, send to OpenAI
-      if (parsed.text && parsed.text.length > 50) {
+      if (parsed.text && parsed.text.length > 50 && openai) {
         const completion = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
