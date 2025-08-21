@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -89,15 +89,33 @@ export function POBuilder() {
     }
   }, []);
   
-  // Save draft whenever fields change
+  // Debounced save draft
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  
   useEffect(() => {
     if (fields) {
-      try {
-        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(fields));
-      } catch (error) {
-        console.error('Failed to save draft:', error);
+      // Clear existing timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
+      
+      // Set new timeout for debounced save (500ms delay)
+      saveTimeoutRef.current = setTimeout(() => {
+        try {
+          localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(fields));
+          logger.info('Draft saved to localStorage');
+        } catch (error) {
+          console.error('Failed to save draft:', error);
+        }
+      }, 500);
     }
+    
+    // Cleanup on unmount
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [fields]);
 
   const handleUpload = async () => {
@@ -126,8 +144,32 @@ export function POBuilder() {
       try {
         data = JSON.parse(text);
       } catch (parseError) {
-        logger.error('Failed to parse response as JSON', { text });
-        throw new Error('Invalid response format from server');
+        // Try to extract JSON from markdown code blocks
+        const codeBlockMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+        if (codeBlockMatch) {
+          try {
+            data = JSON.parse(codeBlockMatch[1]);
+            logger.info('Successfully extracted JSON from markdown code block');
+          } catch (secondParseError) {
+            logger.error('Failed to parse JSON from code block', { text, error: secondParseError });
+            throw new Error('Invalid response format from server - could not parse JSON');
+          }
+        } else {
+          // Try one more time to find any JSON object in the text
+          const jsonMatch = text.match(/(\{[\s\S]*\})/);
+          if (jsonMatch) {
+            try {
+              data = JSON.parse(jsonMatch[1]);
+              logger.info('Successfully extracted JSON from text');
+            } catch (thirdParseError) {
+              logger.error('Failed to parse extracted JSON', { text, error: thirdParseError });
+              throw new Error('Invalid response format from server - malformed JSON');
+            }
+          } else {
+            logger.error('No JSON found in response', { text });
+            throw new Error('Invalid response format from server - no JSON detected');
+          }
+        }
       }
       
       if (!response.ok) {

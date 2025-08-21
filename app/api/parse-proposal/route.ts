@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = process.env.OPENAI_API_KEY 
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
 // Field schema
 const FIELD_SCHEMA = {
@@ -101,6 +103,11 @@ Focus on finding:
 
 Document text:
 ${truncatedText}`;
+
+    if (!openai) {
+      console.error('OpenAI API key not configured');
+      return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
+    }
 
     try {
       const completion = await openai.chat.completions.create({

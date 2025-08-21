@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
 import { Readable } from 'stream';
+import { createErrorResponse, createSuccessResponse } from '@/lib/error-response';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -34,19 +35,30 @@ const FIELD_SCHEMA = {
   notes: ''
 };
 
+interface UploadedFile {
+  id: string;
+}
+
+interface Assistant {
+  id: string;
+}
+
 export async function POST(request: NextRequest) {
+  let uploadedFile: UploadedFile | null = null;
+  let assistant: Assistant | null = null;
+  
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
     if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+      return createErrorResponse('No file uploaded', 400);
     }
     
     // Check OpenAI API key
     if (!process.env.OPENAI_API_KEY) {
       console.error('OpenAI API key not configured');
-      return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
+      return createErrorResponse('OpenAI API key not configured', 500);
     }
     
     console.log('Processing file:', file.name, 'Size:', file.size);
@@ -62,7 +74,7 @@ export async function POST(request: NextRequest) {
       console.log('Uploading file to OpenAI...');
       
       // Upload file to OpenAI
-      const uploadedFile = await openai.files.create({
+      uploadedFile = await openai.files.create({
         file: openAIFile,
         purpose: 'assistants'
       });
@@ -70,7 +82,7 @@ export async function POST(request: NextRequest) {
       console.log('File uploaded to OpenAI:', uploadedFile.id);
       
       // Create an assistant that can read files
-      const assistant = await openai.beta.assistants.create({
+      assistant = await openai.beta.assistants.create({
         name: 'PDF Data Extractor',
         instructions: `You are a data extraction expert. Extract information from the uploaded TCS floor service proposal PDF and return ONLY a JSON object with these exact fields: ${JSON.stringify(FIELD_SCHEMA, null, 2)}. Focus on finding customer/facility name, square footage, service type, pricing, addresses, and contact info.`,
         tools: [{ type: 'file_search' }],
@@ -115,7 +127,7 @@ export async function POST(request: NextRequest) {
       
       // Get the messages
       const messages = await openai.beta.threads.messages.list(thread.id);
-      const assistantMessage = messages.data.find(m => m.role === 'assistant');
+      const assistantMessage = messages.data.find((m: any) => m.role === 'assistant');
       
       if (!assistantMessage || !assistantMessage.content[0]) {
         throw new Error('No response from assistant');
@@ -141,14 +153,7 @@ export async function POST(request: NextRequest) {
         throw new Error('Failed to parse extraction results');
       }
       
-      // Clean up - delete the file and assistant
-      try {
-        await openai.files.delete(uploadedFile.id);
-        await openai.beta.assistants.delete(assistant.id);
-      } catch (cleanupError) {
-        console.error('Cleanup error:', cleanupError);
-        // Continue anyway
-      }
+      // Cleanup will happen in finally block
       
       // Ensure all fields exist and add defaults
       const result = { ...FIELD_SCHEMA, ...extractedData };
@@ -157,21 +162,46 @@ export async function POST(request: NextRequest) {
       
       console.log('Extraction complete');
       
-      return NextResponse.json(result);
+      return createSuccessResponse(result);
       
     } catch (openAIError: any) {
       console.error('OpenAI error:', openAIError);
-      return NextResponse.json({ 
-        error: 'Failed to process PDF with OpenAI',
-        details: openAIError.message
-      }, { status: 500 });
+      return createErrorResponse(
+        'Failed to process PDF with OpenAI',
+        500,
+        openAIError.message
+      );
+    } finally {
+      // Clean up resources even if an error occurred
+      const cleanupPromises = [];
+      
+      if (uploadedFile) {
+        cleanupPromises.push(
+          openai.files.delete(uploadedFile.id).catch((err: any) => 
+            console.error('Failed to delete file:', err)
+          )
+        );
+      }
+      
+      if (assistant) {
+        cleanupPromises.push(
+          openai.beta.assistants.delete(assistant.id).catch((err: any) => 
+            console.error('Failed to delete assistant:', err)
+          )
+        );
+      }
+      
+      if (cleanupPromises.length > 0) {
+        await Promise.allSettled(cleanupPromises);
+      }
     }
     
   } catch (error: any) {
     console.error('Request processing error:', error);
-    return NextResponse.json({ 
-      error: error.message || 'Failed to process request',
-      stack: error.stack
-    }, { status: 500 });
+    return createErrorResponse(
+      error.message || 'Failed to process request',
+      500,
+      error.stack
+    );
   }
 }

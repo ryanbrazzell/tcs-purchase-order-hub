@@ -23,7 +23,9 @@ export class Logger {
         })
       });
     } catch (err) {
-      // Ignore errors sending logs
+      // Fallback to console logging if server logging fails
+      console.warn(`[Logger] Failed to send log to server:`, err);
+      console.log(`[${this.source}] ${level}: ${message}`, data);
     }
   }
 
