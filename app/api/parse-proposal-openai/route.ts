@@ -3,7 +3,9 @@ import OpenAI from 'openai';
 import { Readable } from 'stream';
 import { createErrorResponse, createSuccessResponse } from '@/lib/error-response';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = process.env.OPENAI_API_KEY 
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
 // Field schema
 const FIELD_SCHEMA = {
@@ -62,6 +64,11 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('Processing file:', file.name, 'Size:', file.size);
+    
+    if (!openai) {
+      console.error('OpenAI client not initialized - API key missing');
+      return createErrorResponse('OpenAI API key not configured', 500);
+    }
     
     try {
       // Convert File to a format OpenAI accepts
