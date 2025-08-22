@@ -100,43 +100,77 @@ export async function POST(request: NextRequest) {
     });
     
     try {
-      // Step 1: Extract PDF text using pdf-parse
-      console.log(`[${requestId}] Starting PDF text extraction...`);
+      // Step 1: Process PDF using OpenAI (avoiding pdf-parse debug mode issues)
+      console.log(`[${requestId}] Starting PDF processing via OpenAI...`);
       
-      let pdfText = '';
+      let pdfContent = '';
       
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        console.log(`[${requestId}] PDF buffer created successfully, size: ${buffer.length} bytes`);
+        // Use OpenAI file upload API for reliable PDF processing
+        console.log(`[${requestId}] Uploading PDF to OpenAI for processing...`);
         
-        // Extract text from PDF using pdf-parse (same approach as simple-pdf-test)
-        const pdfParse = (await import('pdf-parse')).default;
-        const parsed = await pdfParse(buffer);
-        pdfText = parsed.text || '';
-        
-        console.log(`[${requestId}] PDF text extraction completed:`, {
-          textLength: pdfText.length,
-          pages: parsed.numpages,
-          preview: pdfText.substring(0, 200) + (pdfText.length > 200 ? '...' : '')
+        const openaiFile = await openai.files.create({
+          file: file,
+          purpose: 'assistants'
         });
         
-        if (!pdfText || pdfText.trim().length < 10) {
-          console.warn(`[${requestId}] PDF text extraction yielded minimal content:`, {
-            textLength: pdfText.length,
-            content: pdfText
+        console.log(`[${requestId}] PDF uploaded to OpenAI:`, {
+          fileId: openaiFile.id,
+          filename: openaiFile.filename,
+          bytes: openaiFile.bytes
+        });
+        
+        // Wait a moment for file processing
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Extract content using GPT-4 with the file
+        const fileContentResponse = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a document text extractor. Extract all text content from the uploaded PDF file and return it exactly as it appears in the document.'
+            },
+            {
+              role: 'user',
+              content: `Please extract all text content from the uploaded PDF file (${openaiFile.id}). Return the complete text as it appears in the document.`
+            }
+          ],
+          temperature: 0,
+          max_tokens: 4000
+        });
+        
+        pdfContent = fileContentResponse.choices[0]?.message?.content || '';
+        
+        console.log(`[${requestId}] PDF content extraction completed:`, {
+          contentLength: pdfContent.length,
+          preview: pdfContent.substring(0, 200) + (pdfContent.length > 200 ? '...' : '')
+        });
+        
+        // Clean up the uploaded file
+        try {
+          await openai.files.delete(openaiFile.id);
+          console.log(`[${requestId}] Cleaned up OpenAI file: ${openaiFile.id}`);
+        } catch (cleanupError) {
+          console.warn(`[${requestId}] Failed to cleanup OpenAI file:`, cleanupError);
+        }
+        
+        if (!pdfContent || pdfContent.trim().length < 10) {
+          console.warn(`[${requestId}] PDF content extraction yielded minimal content:`, {
+            contentLength: pdfContent.length,
+            content: pdfContent
           });
           return NextResponse.json({ 
-            error: 'PDF text extraction failed',
-            details: 'The PDF appears to be empty, corrupted, or contains only images/scanned content that cannot be read as text.'
+            error: 'PDF content extraction failed',
+            details: 'The PDF appears to be empty, corrupted, or contains only images/scanned content that cannot be read.'
           }, { status: 400 });
         }
         
       } catch (pdfError: any) {
-        console.error(`[${requestId}] PDF parsing failed:`, pdfError);
+        console.error(`[${requestId}] PDF processing failed:`, pdfError);
         return NextResponse.json({ 
-          error: 'Failed to extract text from PDF',
-          details: 'The PDF file may be corrupted, password-protected, or in an unsupported format'
+          error: 'Failed to process PDF',
+          details: pdfError.message || 'The PDF file may be corrupted, password-protected, or in an unsupported format'
         }, { status: 400 });
       }
       
@@ -196,7 +230,7 @@ ${voiceTranscription ? `VOICE TRANSCRIPTION CONTEXT:
 VOICE GUIDANCE: Use the voice recording above to provide additional context, fill missing details, or clarify ambiguous information from the PDF. The voice note may contain customer preferences, site logistics, timing details, or special requirements not in the PDF.` : ''}
 
 PDF DOCUMENT CONTENT:
-"${pdfText.substring(0, 6000)}${pdfText.length > 6000 ? '...[content truncated]' : ''}"
+"${pdfContent.substring(0, 6000)}${pdfContent.length > 6000 ? '...[content truncated]' : ''}"
 
 EXTRACTION TASK:
 Extract all relevant information from the proposal PDF text${voiceTranscription ? ' and voice context' : ''} to populate purchase order fields. Focus on:
