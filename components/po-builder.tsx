@@ -10,7 +10,7 @@ import { Loader2, Upload, Download, FileText, Mic } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Logger } from '@/lib/logger';
 import { ExtractionProgress } from './extraction-progress';
-import { VoiceRecorder } from './voice-recorder';
+import { VoiceRecorderCompact } from './voice-recorder-compact';
 
 const logger = new Logger('po-builder');
 
@@ -105,7 +105,8 @@ export function POBuilder() {
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
-  const [inputMode, setInputMode] = useState<'pdf' | 'voice' | 'both'>('pdf');
+  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
+  const [hasVoiceNote, setHasVoiceNote] = useState(false);
   
   // Stable callback for progress completion
   const handleProgressComplete = useCallback(() => {
@@ -115,29 +116,19 @@ export function POBuilder() {
     }
   }, [fields]);
 
-  // Handle voice transcription completion
-  const handleVoiceTranscription = useCallback((result: any) => {
-    if (result.success && result.extractedData) {
-      const voiceData = result.extractedData;
-      
-      // Merge with existing PDF data if present
-      if (fields) {
-        // Merge voice data with PDF data (voice data takes precedence for filled fields)
-        const mergedData: POFields = { ...fields };
-        Object.keys(voiceData).forEach(key => {
-          if (voiceData[key] && voiceData[key].trim() !== '') {
-            mergedData[key as FieldKey] = voiceData[key];
-          }
-        });
-        setFields(mergedData);
-        toast.success('Voice data merged with PDF data!');
-      } else {
-        // Set voice data as primary data
-        setFields(voiceData);
-        toast.success('Voice data extracted successfully!');
-      }
-    }
-  }, [fields, setFields]);
+  // Handle voice recording completion
+  const handleVoiceRecorded = useCallback((blob: Blob) => {
+    setVoiceBlob(blob);
+    setHasVoiceNote(true);
+    toast.success('Voice note recorded! Ready to extract with PDF.');
+  }, []);
+
+  // Handle voice deletion
+  const handleVoiceDeleted = useCallback(() => {
+    setVoiceBlob(null);
+    setHasVoiceNote(false);
+    toast.success('Voice note removed.');
+  }, []);
   
   // Calculate total from line items
   const calculateTotal = useCallback(() => {
@@ -196,7 +187,7 @@ export function POBuilder() {
     };
   }, [fields]);
 
-  const handleUpload = async () => {
+  const handleExtractData = async () => {
     if (!file) return;
     
     setIsUploading(true);
@@ -207,8 +198,14 @@ export function POBuilder() {
       const formData = new FormData();
       formData.append('file', file);
       
-      // Use the OpenAI file upload endpoint
-      const response = await fetch('/api/parse-proposal-openai', {
+      // Add voice note if present
+      if (voiceBlob) {
+        formData.append('voice', voiceBlob, 'voice-note.webm');
+        logger.info('Including voice note in extraction', { voiceSize: voiceBlob.size });
+      }
+
+      // Use the combined extraction endpoint
+      const response = await fetch('/api/parse-proposal-combined', {
         method: 'POST',
         body: formData
       });
@@ -376,63 +373,28 @@ export function POBuilder() {
           </p>
         </div>
 
-        {/* Input Mode Selection */}
-        <div className="flex justify-center mb-8">
-          <div className="bg-muted/50 p-1 rounded-lg flex items-center space-x-1">
-            <button
-              onClick={() => setInputMode('pdf')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                inputMode === 'pdf'
-                  ? 'bg-primary text-primary-foreground shadow'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <FileText className="w-4 h-4 mr-2 inline" />
-              PDF Upload
-            </button>
-            <button
-              onClick={() => setInputMode('voice')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                inputMode === 'voice'
-                  ? 'bg-primary text-primary-foreground shadow'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Mic className="w-4 h-4 mr-2 inline" />
-              Voice Input
-            </button>
-            <button
-              onClick={() => setInputMode('both')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                inputMode === 'both'
-                  ? 'bg-primary text-primary-foreground shadow'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <FileText className="w-4 h-4 mr-1 inline" />
-              <Mic className="w-4 h-4 mr-2 inline" />
-              PDF + Voice
-            </button>
-          </div>
-        </div>
 
-        {/* PDF Upload Section */}
-        {(inputMode === 'pdf' || inputMode === 'both') && (
-          <Card className="p-8 border-0 shadow-lg bg-gradient-to-br from-card to-card/95 mb-6">
-            <div className="space-y-6">
+        {/* Combined Upload Section */}
+        <Card className="p-8 border-0 shadow-lg bg-gradient-to-br from-card to-card/95">
+          <div className="space-y-6">
             {!fields && (
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 text-center">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <FileText className="w-8 h-8 text-primary" />
                 </div>
-                <h3 className="font-semibold text-lg mb-2">Get Started</h3>
+                <h3 className="font-semibold text-lg mb-2">Extract Job Data</h3>
                 <p className="text-muted-foreground">
-                  Upload a PDF proposal to automatically extract data and create your purchase order
+                  Upload a PDF proposal (required) and optionally add a voice note for maximum context
                 </p>
               </div>
             )}
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="flex-1 w-full">
+            
+            {/* PDF Upload */}
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">
+                  PDF Proposal (Required)
+                </label>
                 <label htmlFor="file-upload" className="block">
                   <div className="border-2 border-dashed border-input rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
                     <input
@@ -442,48 +404,74 @@ export function POBuilder() {
                       onChange={(e) => setFile(e.target.files?.[0] || null)}
                       className="sr-only"
                     />
-                    <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                    <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
                     <p className="text-sm font-medium">
-                      {file ? file.name : 'Click to select a file'}
+                      {file ? file.name : 'Click to select PDF file'}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      PDF files only
+                      PDF files only • Required for extraction
                     </p>
                   </div>
                 </label>
               </div>
-              <Button
-                onClick={handleUpload}
-                disabled={!file || isUploading}
-                size="lg"
-                className="min-w-[140px] shadow-md"
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Parsing...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Parse PDF
-                  </>
-                )}
-              </Button>
             </div>
-            </div>
-          </Card>
-        )}
+          </div>
+        </Card>
 
-        {/* Voice Recording Section */}
-        {(inputMode === 'voice' || inputMode === 'both') && (
-          <div className="mb-6">
-            <VoiceRecorder
-              onTranscriptionComplete={handleVoiceTranscription}
+        {/* Optional Voice Note Section */}
+        <Card className="p-6 border-0 shadow-lg bg-gradient-to-br from-card to-card/95">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium text-foreground block">
+                  Voice Note (Optional)
+                </label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Add voice details for better context and more complete extraction
+                </p>
+              </div>
+              {hasVoiceNote && (
+                <div className="flex items-center text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                  <Mic className="w-4 h-4 mr-1" />
+                  Voice note ready
+                </div>
+              )}
+            </div>
+            
+            <VoiceRecorderCompact
+              onRecordingComplete={handleVoiceRecorded}
+              onRecordingDeleted={handleVoiceDeleted}
               isUploading={isUploading}
             />
           </div>
-        )}
+        </Card>
+        
+        {/* Single Extract Button */}
+        <div className="flex justify-center py-6">
+          <Button
+            onClick={handleExtractData}
+            disabled={!file || isUploading}
+            size="lg"
+            className="min-w-[200px] shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all"
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Extracting Data...
+              </>
+            ) : (
+              <>
+                <Upload className="w-5 h-5 mr-2" />
+                Extract Data
+                {hasVoiceNote && (
+                  <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                    PDF + Voice
+                  </span>
+                )}
+              </>
+            )}
+          </Button>
+        </div>
 
         {/* Fields Editor */}
         {fields && (
