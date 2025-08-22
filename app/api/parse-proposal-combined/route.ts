@@ -171,11 +171,7 @@ export async function POST(request: NextRequest) {
               size: file.size,
               type: file.type
             },
-            assistantInfo: {
-              assistantId: assistant?.id,
-              threadId: thread?.id,
-              runStatus: runStatus?.status
-            }
+            extractionMethod: 'pdf-parse-direct'
           });
           return NextResponse.json({ 
             error: 'PDF content extraction failed - No readable text found',
