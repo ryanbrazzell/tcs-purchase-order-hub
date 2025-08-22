@@ -222,49 +222,42 @@ export async function POST(request: NextRequest) {
         voiceProcessingError: !!voiceProcessingError
       });
       
-      const extractionPrompt = `You are a floor service operations expert who extracts structured data from proposal documents and voice recordings to create detailed purchase orders.
+      const extractionPrompt = `You are a floor service operations expert who extracts structured data from proposal documents to create detailed purchase orders.
 
-${voiceTranscription ? `VOICE TRANSCRIPTION CONTEXT:
-"${voiceTranscription}"
-
-VOICE GUIDANCE: Use the voice recording above to provide additional context, fill missing details, or clarify ambiguous information from the PDF. The voice note may contain customer preferences, site logistics, timing details, or special requirements not in the PDF.` : ''}
-
-PDF DOCUMENT CONTENT:
+PRIMARY DATA SOURCE - PDF DOCUMENT CONTENT:
 "${pdfContent.substring(0, 6000)}${pdfContent.length > 6000 ? '...[content truncated]' : ''}"
 
-EXTRACTION TASK:
-Extract all relevant information from the proposal PDF text${voiceTranscription ? ' and voice context' : ''} to populate purchase order fields. Focus on:
+CRITICAL INSTRUCTION: The PDF document above is your PRIMARY and MAIN data source. Extract ALL information from this PDF first.
 
-PRIMARY DATA SOURCES:
+${voiceTranscription ? `SUPPLEMENTARY VOICE CONTEXT (Use ONLY to enhance/clarify PDF data):
+"${voiceTranscription}"
+
+VOICE ENHANCEMENT RULES:
+- PDF data takes ABSOLUTE PRIORITY - never override PDF information with voice data
+- Use voice ONLY to fill gaps where PDF has no information  
+- Use voice to add supplementary details to special_requirements or notes fields
+- Use voice to clarify ambiguous PDF content, but keep PDF data as the source of truth
+- If voice contradicts PDF, always use the PDF data` : ''}
+
+EXTRACTION WORKFLOW:
+1. FIRST: Extract ALL data from the PDF document content above
+2. SECOND: Parse customer information, addresses, pricing, and specifications from PDF
+3. THIRD: Extract job details, timelines, and requirements from PDF
+${voiceTranscription ? `4. FINALLY: Use voice notes ONLY to enhance or add missing details that aren't in PDF` : ''}
+
+PRIMARY DATA EXTRACTION FROM PDF:
 1. Customer Information: Company name, contacts, phone numbers, addresses
-2. Job Site Details: Service address, city, state, ZIP code
+2. Job Site Details: Service address, city, state, ZIP code  
 3. Service Specifications: Floor type, square footage, service description
 4. Timeline: Requested dates, deadlines, scheduling requirements
-5. Pricing: Line items, costs, totals
+5. Pricing: Line items, costs, totals from PDF
 6. Special Requirements: Access needs, timing restrictions, material specifications
 7. Subcontractor Info: Company details if mentioned
-
-${voiceTranscription ? `VOICE-ENHANCED EXTRACTION RULES:
-- Prioritize voice details for clarification of ambiguous PDF content
-- Use voice context to enhance service descriptions and special requirements
-- Fill gaps in PDF data using voice information
-- Combine both sources for maximum context and completeness` : ''}
-
-EXTRACTION PRIORITIES:
-1. Parse all text content from the PDF proposal above
-2. Identify customer company, contact person, phone/email
-3. Extract job site address and location details
-4. Determine floor type (VCT, carpet, hard surface, etc.) and square footage
-5. Identify service type and detailed description
-6. Extract timeline and requested service dates
-7. Parse pricing information and line items
-8. Capture special requirements, access needs, or restrictions
-9. Identify any subcontractor or vendor information
 
 Return ONLY valid JSON using this exact schema:
 ${JSON.stringify(FIELD_SCHEMA, null, 2)}
 
-Extract comprehensive data from the PDF text${voiceTranscription ? ' and voice context' : ''}:`;
+REMEMBER: Extract primarily from PDF document content. Voice is supplementary enhancement only.`;
 
       let completion;
       try {
