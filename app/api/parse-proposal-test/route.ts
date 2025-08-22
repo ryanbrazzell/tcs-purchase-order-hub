@@ -5,7 +5,7 @@ const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
-// Field schema - includes service_description for package selection
+// Same field schema as the main endpoints
 const FIELD_SCHEMA = {
   po_date: '',
   po_number: '',
@@ -22,7 +22,7 @@ const FIELD_SCHEMA = {
   state: '',
   zip: '',
   service_type: '',
-  service_description: '', // This will hold the selected package details
+  service_description: '',
   floor_type: '',
   square_footage: '',
   unit_price: '',
@@ -34,7 +34,6 @@ const FIELD_SCHEMA = {
   special_requirements: '',
   doc_reference: '',
   notes: '',
-  // Subcontractor fields (usually filled manually)
   subcontractor_company: '',
   subcontractor_contact: '',
   subcontractor_phone: '',
@@ -43,7 +42,6 @@ const FIELD_SCHEMA = {
   subcontractor_city: '',
   subcontractor_state: '',
   subcontractor_zip: '',
-  // Line item fields for pricing
   line_item_1_desc: '',
   line_item_1_price: '',
   line_item_2_desc: '',
@@ -58,58 +56,22 @@ const FIELD_SCHEMA = {
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const body = await request.json();
+    const { extractedText } = body;
     
-    if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+    if (!extractedText) {
+      return NextResponse.json({ error: 'No extractedText provided' }, { status: 400 });
     }
     
-    // Extract text from PDF
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    let extractedText = '';
-    try {
-      // Dynamic import to avoid Vercel build issues
-      const pdfParse = (await import('pdf-parse')).default;
-      const data = await pdfParse(buffer);
-      extractedText = data.text || '';
-      console.log(`Extracted ${extractedText.length} characters from PDF`);
-    } catch (pdfError: any) {
-      console.error('PDF extraction failed:', pdfError);
-      return NextResponse.json({ 
-        error: 'Failed to extract text from PDF',
-        details: pdfError.message
-      }, { status: 400 });
-    }
-    
-    if (!extractedText.trim()) {
-      return NextResponse.json({ 
-        error: 'No text found in PDF',
-        details: 'The PDF might be a scanned image or corrupted'
-      }, { status: 400 });
-    }
-    
-    // Check OpenAI API key
     if (!process.env.OPENAI_API_KEY) {
-      console.error('OpenAI API key not configured');
       return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
     }
     
-    // Send to OpenAI for field extraction
-    console.log('Sending to OpenAI for extraction');
+    if (!openai) {
+      return NextResponse.json({ error: 'OpenAI client not initialized' }, { status: 500 });
+    }
     
-    // Limit text to prevent token overflow
-    const maxTextLength = 4000; // Roughly 1000 tokens
-    const truncatedText = extractedText.length > maxTextLength 
-      ? extractedText.substring(0, maxTextLength) + '\n\n[... text truncated for length ...]'
-      : extractedText;
-    
-    console.log('Text length for OpenAI', { 
-      original: extractedText.length, 
-      truncated: truncatedText.length 
-    });
+    console.log('Testing optimized prompt with text length:', extractedText.length);
     
     const prompt = `You are a floor service operations expert who transforms customer sales proposals into detailed subcontractor work instructions.
 
@@ -161,87 +123,85 @@ Customer sees: "Premium Floor Care Package for 5,000 sq ft office. Work on weeke
 Subcontractor gets: "Strip 5,000 sq ft VCT flooring using high-quality commercial-grade stripper. Clean thoroughly, apply 3 coats high-traffic floor finish with 2-hour cure time between coats. Buff to high-gloss finish. LOGISTICS: Weekend work only. Move all furniture to conference room before starting. Use low-odor products due to customer requirement. Estimated time: 8-10 hours over 2 days."
 
 Document text:
-${truncatedText}`;
+${extractedText}`;
 
-    if (!openai) {
-      console.error('OpenAI API key not configured');
-      return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { 
+          role: 'system', 
+          content: 'You are a floor service operations expert specializing in transforming customer proposals into detailed subcontractor work orders. Focus on preserving ALL site-specific details, customer requirements, and logistical nuances while converting customer-facing package names into specific contractor instructions. Return ONLY valid JSON.' 
+        },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0,
+      max_tokens: 1500,
+      response_format: { type: 'json_object' }
+    });
+    
+    const responseContent = completion.choices[0]?.message?.content;
+    
+    if (!responseContent) {
+      return NextResponse.json({ error: 'Empty response from OpenAI' }, { status: 500 });
     }
-
+    
+    let extractedData;
     try {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'You are a floor service operations expert specializing in transforming customer proposals into detailed subcontractor work orders. Focus on preserving ALL site-specific details, customer requirements, and logistical nuances while converting customer-facing package names into specific contractor instructions. Return ONLY valid JSON.' 
-          },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0,
-        max_tokens: 1000,
-        response_format: { type: 'json_object' }
-      });
-      
-      console.log('OpenAI API call successful');
-      const responseContent = completion.choices[0]?.message?.content;
-      
-      if (!responseContent) {
-        console.error('Empty response from OpenAI');
-        return NextResponse.json({ 
-          error: 'Empty response from OpenAI'
-        }, { status: 500 });
-      }
-      
-      let extractedData;
-      try {
-        extractedData = JSON.parse(responseContent);
-        console.log('Successfully parsed JSON', { keys: Object.keys(extractedData) });
-      } catch (parseError: any) {
-        console.error('JSON parse error', { error: parseError.message });
-        return NextResponse.json({ 
-          error: 'Failed to parse OpenAI response',
-          details: parseError.message
-        }, { status: 500 });
-      }
-      
-      // Ensure all fields exist and add defaults
-      const result = { ...FIELD_SCHEMA, ...extractedData };
-      result.po_number = result.po_number || `PO-${Math.floor(100000 + Math.random() * 900000)}`;
-      result.po_date = result.po_date || new Date().toISOString().split('T')[0];
-      
-      // If service_description is empty but service_type exists, use service_type as fallback
-      if (!result.service_description && result.service_type) {
-        console.warn('No package selection found, using service_type as fallback');
-        result.service_description = result.service_type;
-      }
-      
-      console.log('Extraction complete', { 
-        customer_company: result.customer_company,
-        square_footage: result.square_footage,
-        service_type: result.service_type,
-        service_description: result.service_description ? 
-          result.service_description.substring(0, 100) + '...' : 'NOT FOUND'
-      });
-      
-      return NextResponse.json(result);
-      
-    } catch (openAIError: any) {
-      console.error('OpenAI API error', { 
-        error: openAIError.message,
-        response: openAIError.response?.data
-      });
-      
+      extractedData = JSON.parse(responseContent);
+    } catch (parseError: any) {
+      console.error('JSON parse error:', parseError);
       return NextResponse.json({ 
-        error: 'Failed to call OpenAI API',
-        details: openAIError.message
+        error: 'Failed to parse OpenAI response',
+        details: parseError.message,
+        rawResponse: responseContent
       }, { status: 500 });
     }
     
+    // Ensure all fields exist and add defaults
+    const result = { ...FIELD_SCHEMA, ...extractedData };
+    result.po_number = result.po_number || `PO-${Math.floor(100000 + Math.random() * 900000)}`;
+    result.po_date = result.po_date || new Date().toISOString().split('T')[0];
+    
+    // If service_description is empty but service_type exists, use service_type as fallback
+    if (!result.service_description && result.service_type) {
+      console.warn('No package selection found, using service_type as fallback');
+      result.service_description = result.service_type;
+    }
+    
+    console.log('✅ Test parsing successful');
+    console.log('Service description length:', result.service_description?.length || 0);
+    console.log('Line items populated:', [
+      result.line_item_1_desc,
+      result.line_item_2_desc, 
+      result.line_item_3_desc,
+      result.line_item_4_desc,
+      result.line_item_5_desc
+    ].filter(Boolean).length);
+    
+    return NextResponse.json({
+      success: true,
+      result,
+      metadata: {
+        serviceDescriptionLength: result.service_description?.length || 0,
+        lineItemsPopulated: [
+          result.line_item_1_desc,
+          result.line_item_2_desc, 
+          result.line_item_3_desc,
+          result.line_item_4_desc,
+          result.line_item_5_desc
+        ].filter(Boolean).length,
+        hasLogistics: result.service_description?.includes('weekend') || 
+                     result.service_description?.includes('furniture') ||
+                     result.service_description?.includes('artwork') ||
+                     result.service_description?.includes('low-odor') ||
+                     result.service_description?.includes('LOGISTICS')
+      }
+    });
+    
   } catch (error: any) {
-    console.error('Request processing error:', error);
+    console.error('Test parsing error:', error);
     return NextResponse.json({ 
-      error: error.message || 'Failed to process request',
+      error: error.message || 'Failed to process test request',
       stack: error.stack
     }, { status: 500 });
   }

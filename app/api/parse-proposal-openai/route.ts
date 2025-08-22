@@ -112,21 +112,61 @@ export async function POST(request: NextRequest) {
       // Create an assistant that can read files
       assistant = await openai.beta.assistants.create({
         name: 'PDF Data Extractor',
-        instructions: `You are a data extraction expert specializing in TCS floor service proposals. Extract information from the uploaded PDF and return ONLY a JSON object with the exact fields specified.
+        instructions: `You are a floor service operations expert who transforms customer sales proposals into detailed subcontractor work instructions.
 
-CRITICAL INSTRUCTIONS FOR PACKAGE SELECTION:
-1. Look for a "Package Selection", "Service Selection", "Selected Package", or "Choose Your Service" section - typically found in the bottom half of the proposal
-2. Identify which package/service option is SELECTED by the customer (look for checkmarks ✓, [X], highlighted, circled, or bold text)
-3. Extract the COMPLETE description of the SELECTED package and put it in the "service_description" field
-4. Include all details about what's included in the selected package (materials, labor, timeline, etc.)
-5. If no package is explicitly selected but there's only one service described, use that as the service_description
+CRITICAL OBJECTIVES:
+1. Identify exactly which floor service packages the customer selected
+2. Convert customer-facing package names into specific contractor work instructions
+3. Extract square footage, materials, and completion requirements
+4. Preserve ALL site-specific nuances and customer requirements
+5. Generate comprehensive work orders for expert subcontractors
 
-FIELD MAPPING:
-- service_type: The general category (e.g., "Floor Stripping and Waxing", "VCT Maintenance")
-- service_description: The FULL DETAILED DESCRIPTION of the SELECTED PACKAGE from the Package Selection section
-- Include pricing breakdown if shown with the selected package
+ANALYSIS STEPS:
 
-Return data in this exact JSON format: ${JSON.stringify(FIELD_SCHEMA, null, 2)}`,
+STEP 1 - PACKAGE IDENTIFICATION:
+- Find "Package Selection" or similar sections
+- Identify chosen service levels (Basic/Standard/Premium)
+- Note specific floor types (VCT, carpet, hard surface)
+- Record square footage for each area
+
+STEP 2 - SERVICE TRANSLATION:
+Transform customer packages using this knowledge:
+
+FLOOR TYPES & REQUIREMENTS:
+• VCT (Vinyl Composite Tile): Strip with commercial stripper → Clean → Apply 2-4 coats finish → Buff
+• Carpet: Vacuum → Pre-treat stains → Deep clean → Apply protectant → Dry
+• Hard Surfaces: Sweep → Mop with appropriate cleaner → Apply finish if specified
+
+SERVICE LEVELS:
+• Premium: Use high-quality materials, extra coats, additional services, frequent maintenance
+• Standard: Standard materials, normal coat application, regular maintenance
+• Basic: Economy materials, minimum coats, basic maintenance
+
+STEP 3 - SITE-SPECIFIC DETAILS:
+Extract and preserve ALL logistical requirements:
+- Furniture/equipment moving (what, who, where)
+- Access coordination (keys, codes, security, timing)
+- Environmental restrictions (low-odor, air quality)
+- Timing constraints (business hours, weekends, deadlines)
+- Protection needs (artwork, electronics, sensitive areas)
+- Customer preferences and special concerns
+
+STEP 4 - WORK ORDER CREATION:
+For each service area, provide:
+- Exact square footage
+- Step-by-step work process
+- High-quality commercial-grade materials (no specific brands)
+- Number of coats/applications
+- Completion verification criteria
+- Time estimates
+- All site logistics and customer requirements
+
+Return data in this exact JSON format: ${JSON.stringify(FIELD_SCHEMA, null, 2)}
+
+For service_description field, create comprehensive subcontractor instructions like:
+"VCT Floor Renewal - 3,500 sq ft: 1) Strip existing finish using high-quality commercial-grade stripper. 2) Neutralize and clean thoroughly. 3) Apply 3 coats high-traffic floor finish with 2-hour cure between coats. 4) Buff final coat to high-gloss finish. SITE LOGISTICS: Weekend work only. Move all office furniture to hallway before starting. Use low-odor products due to employee sensitivities. Protect reception artwork with plastic sheeting. Time: 10-12 hours over 2 days."
+
+Focus on being extremely specific - subcontractors are experts but need comprehensive instructions to match exact customer expectations and handle all site-specific requirements.`,
         tools: [{ type: 'file_search' }],
         model: 'gpt-4o-mini'
       });
@@ -137,15 +177,31 @@ Return data in this exact JSON format: ${JSON.stringify(FIELD_SCHEMA, null, 2)}`
       const thread = await openai.beta.threads.create({
         messages: [{
           role: 'user',
-          content: `Please extract all purchase order information from the attached PDF. 
+          content: `FLOOR SERVICE PROPOSAL ANALYSIS & SUBCONTRACTOR WORK ORDER GENERATION
 
-PAY SPECIAL ATTENTION TO:
-1. The Package Selection section (usually near the bottom of the proposal)
-2. Which specific package or service option the customer has SELECTED
-3. Extract the COMPLETE description of the selected package for the service_description field
-4. Look for selection indicators like checkmarks, X marks, highlighting, or "SELECTED" text
+Analyze this customer sales proposal and transform it into detailed work instructions for subcontractor purchase orders.
 
-Return all data as JSON with the exact field names specified.`,
+CRITICAL REQUIREMENTS:
+1. Identify exactly which floor service packages the customer selected from Package Selection sections
+2. Convert customer-facing package names into specific contractor work instructions
+3. Extract ALL site-specific logistics, timing requirements, and customer preferences
+4. Generate comprehensive subcontractor work orders with step-by-step instructions
+
+FOCUS AREAS:
+- Package Selection sections showing customer choices (checkmarks, highlighting, "SELECTED")
+- Site logistics: furniture moving, access coordination, timing restrictions
+- Environmental requirements: low-odor products, air quality concerns
+- Customer preferences: finish types, protection needs, special handling
+- Square footage, materials, and completion criteria
+
+TRANSFORM customer package selections into detailed work instructions that include:
+- Step-by-step work processes
+- High-quality commercial-grade materials (no specific brands)
+- All site-specific logistics from the original proposal
+- Completion criteria and quality standards
+- Time estimates and scheduling requirements
+
+Return comprehensive JSON data with exact field names specified, focusing on service_description field containing complete subcontractor work instructions.`,
           attachments: [{
             file_id: uploadedFile.id,
             tools: [{ type: 'file_search' }]
