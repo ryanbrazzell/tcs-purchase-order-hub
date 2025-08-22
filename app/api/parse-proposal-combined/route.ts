@@ -50,49 +50,94 @@ const FIELD_SCHEMA = {
 };
 
 export async function POST(request: NextRequest) {
+  const requestId = Math.random().toString(36).substring(2, 9);
+  
   try {
+    console.log(`[${requestId}] Starting combined extraction request`);
+    
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const voiceFile = formData.get('voice') as File | null;
     
+    // Validate inputs
     if (!file) {
+      console.error(`[${requestId}] No PDF file uploaded`);
       return NextResponse.json({ error: 'No PDF file uploaded' }, { status: 400 });
     }
     
+    if (!file.type.includes('pdf')) {
+      console.error(`[${requestId}] Invalid file type: ${file.type}`);
+      return NextResponse.json({ error: 'Only PDF files are supported' }, { status: 400 });
+    }
+    
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      console.error(`[${requestId}] File too large: ${file.size} bytes`);
+      return NextResponse.json({ error: 'File size must be under 10MB' }, { status: 400 });
+    }
+    
+    if (voiceFile && voiceFile.size > 25 * 1024 * 1024) { // 25MB limit for audio
+      console.error(`[${requestId}] Voice file too large: ${voiceFile.size} bytes`);
+      return NextResponse.json({ error: 'Voice file size must be under 25MB' }, { status: 400 });
+    }
+    
     if (!process.env.OPENAI_API_KEY) {
-      console.error('OpenAI API key not configured');
+      console.error(`[${requestId}] OpenAI API key not configured`);
       return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
     }
     
     if (!openai) {
-      console.error('OpenAI client not initialized');
-      return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
+      console.error(`[${requestId}] OpenAI client not initialized`);
+      return NextResponse.json({ error: 'OpenAI service unavailable' }, { status: 500 });
     }
     
-    console.log('Processing combined extraction:', {
+    console.log(`[${requestId}] Processing combined extraction:`, {
       pdfName: file.name,
       pdfSize: file.size,
+      pdfType: file.type,
       hasVoice: !!voiceFile,
-      voiceSize: voiceFile?.size
+      voiceSize: voiceFile?.size,
+      voiceType: voiceFile?.type
     });
     
     try {
       // Step 1: Extract PDF text
-      console.log('Starting PDF text extraction...');
+      console.log(`[${requestId}] Starting PDF text extraction...`);
       
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+      let arrayBuffer;
+      let buffer;
+      
+      try {
+        arrayBuffer = await file.arrayBuffer();
+        buffer = Buffer.from(arrayBuffer);
+        console.log(`[${requestId}] PDF buffer created successfully, size: ${buffer.length} bytes`);
+      } catch (bufferError: any) {
+        console.error(`[${requestId}] Failed to read PDF file:`, bufferError);
+        return NextResponse.json({ 
+          error: 'Failed to read PDF file',
+          details: 'The uploaded file may be corrupted or invalid'
+        }, { status: 400 });
+      }
       
       // Use OpenAI's vision model to extract text from PDF
       const base64Pdf = buffer.toString('base64');
       const dataUrl = `data:application/pdf;base64,${base64Pdf}`;
       
+      console.log(`[${requestId}] PDF converted to base64, length: ${base64Pdf.length} chars`);
+      
       // Step 2: Process voice transcription if provided
       let voiceTranscription = '';
+      let voiceProcessingError = null;
+      
       if (voiceFile) {
-        console.log('Processing voice transcription...');
+        console.log(`[${requestId}] Processing voice transcription...`);
         
         try {
+          console.log(`[${requestId}] Starting Whisper transcription for file:`, {
+            name: voiceFile.name,
+            size: voiceFile.size,
+            type: voiceFile.type
+          });
+          
           const transcription = await openai.audio.transcriptions.create({
             file: voiceFile,
             model: 'whisper-1',
@@ -102,15 +147,30 @@ export async function POST(request: NextRequest) {
           });
           
           voiceTranscription = transcription || '';
-          console.log('Voice transcription completed, length:', voiceTranscription.length);
+          console.log(`[${requestId}] Voice transcription completed successfully:`, {
+            length: voiceTranscription.length,
+            preview: voiceTranscription.substring(0, 100) + (voiceTranscription.length > 100 ? '...' : '')
+          });
         } catch (voiceError: any) {
-          console.warn('Voice transcription failed, continuing with PDF only:', voiceError.message);
-          // Continue with PDF only if voice fails
+          voiceProcessingError = {
+            message: voiceError.message,
+            code: voiceError.code,
+            type: voiceError.type,
+            status: voiceError.status
+          };
+          console.error(`[${requestId}] Voice transcription failed:`, voiceProcessingError);
+          
+          // If voice processing fails, continue with PDF only but track the error
+          console.warn(`[${requestId}] Continuing with PDF-only processing due to voice error`);
         }
       }
       
       // Step 3: Combined data extraction from PDF and voice
-      console.log('Starting combined data extraction...');
+      console.log(`[${requestId}] Starting combined data extraction...`, {
+        hasVoiceTranscription: !!voiceTranscription,
+        voiceTranscriptionLength: voiceTranscription.length,
+        voiceProcessingError: !!voiceProcessingError
+      });
       
       const extractionPrompt = `You are a floor service operations expert who extracts structured data from proposal documents and voice recordings to create detailed purchase orders.
 
@@ -153,45 +213,99 @@ ${JSON.stringify(FIELD_SCHEMA, null, 2)}
 
 Extract comprehensive data from the proposal${voiceTranscription ? ' and voice context' : ''}:`;
 
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'You are a floor service data extraction expert. Extract structured information from proposal documents and optional voice recordings to create detailed purchase orders. Return ONLY valid JSON with exact field names provided.' 
-          },
-          { 
-            role: 'user', 
-            content: [
-              { type: 'text', text: extractionPrompt },
-              { type: 'image_url', image_url: { url: dataUrl } }
-            ]
-          }
-        ],
-        temperature: 0,
-        max_tokens: 1500,
-        response_format: { type: 'json_object' }
-      });
+      let completion;
+      try {
+        console.log(`[${requestId}] Calling OpenAI GPT-4o for extraction...`);
+        
+        completion = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            { 
+              role: 'system', 
+              content: 'You are a floor service data extraction expert. Extract structured information from proposal documents and optional voice recordings to create detailed purchase orders. Return ONLY valid JSON with exact field names provided.' 
+            },
+            { 
+              role: 'user', 
+              content: [
+                { type: 'text', text: extractionPrompt },
+                { type: 'image_url', image_url: { url: dataUrl } }
+              ]
+            }
+          ],
+          temperature: 0,
+          max_tokens: 1500,
+          response_format: { type: 'json_object' }
+        });
+        
+        console.log(`[${requestId}] OpenAI extraction completed:`, {
+          model: completion.model,
+          usage: completion.usage,
+          finishReason: completion.choices[0]?.finish_reason
+        });
+        
+      } catch (openaiError: any) {
+        console.error(`[${requestId}] OpenAI extraction failed:`, {
+          message: openaiError.message,
+          code: openaiError.code,
+          type: openaiError.type,
+          status: openaiError.status,
+          request_id: openaiError.request_id
+        });
+        
+        if (openaiError.code === 'invalid_request_error') {
+          return NextResponse.json({ 
+            error: 'Invalid request to AI service',
+            details: 'The PDF format may not be supported or the file may be corrupted',
+            openaiError: openaiError.message
+          }, { status: 400 });
+        }
+        
+        if (openaiError.code === 'rate_limit_exceeded') {
+          return NextResponse.json({ 
+            error: 'Service temporarily unavailable',
+            details: 'Please try again in a few moments',
+            retryAfter: 30
+          }, { status: 429 });
+        }
+        
+        throw openaiError; // Re-throw to be caught by outer catch
+      }
       
       const responseContent = completion.choices[0]?.message?.content;
       
       if (!responseContent) {
-        console.error('Empty response from OpenAI extraction');
-        return NextResponse.json({ error: 'Failed to extract data from documents' }, { status: 500 });
+        console.error(`[${requestId}] Empty response from OpenAI extraction`);
+        return NextResponse.json({ 
+          error: 'Empty response from AI service',
+          details: 'The AI service returned no content. The PDF may be unreadable or contain no extractable text.'
+        }, { status: 500 });
       }
+      
+      console.log(`[${requestId}] Raw OpenAI response:`, {
+        length: responseContent.length,
+        preview: responseContent.substring(0, 200) + (responseContent.length > 200 ? '...' : '')
+      });
       
       let extractedData;
       try {
         extractedData = JSON.parse(responseContent);
-        console.log('Successfully parsed combined extraction data', { 
+        console.log(`[${requestId}] Successfully parsed extraction data:`, { 
           keys: Object.keys(extractedData),
+          keyCount: Object.keys(extractedData).length,
           hasVoiceContext: !!voiceTranscription
         });
       } catch (parseError: any) {
-        console.error('JSON parse error:', parseError);
+        console.error(`[${requestId}] JSON parse error:`, {
+          error: parseError.message,
+          rawContent: responseContent
+        });
         return NextResponse.json({ 
-          error: 'Failed to parse extraction results',
-          details: parseError.message
+          error: 'Invalid response format from AI service',
+          details: `Failed to parse AI response as JSON: ${parseError.message}`,
+          debugInfo: {
+            rawResponse: responseContent.substring(0, 500),
+            parseError: parseError.message
+          }
         }, { status: 500 });
       }
       
@@ -205,39 +319,104 @@ Extract comprehensive data from the proposal${voiceTranscription ? ' and voice c
         ? `${file.name} + Voice Recording`
         : file.name;
       
-      console.log('Combined extraction complete', {
+      console.log(`[${requestId}] Combined extraction completed successfully:`, {
         pdfName: file.name,
+        pdfSize: file.size,
         hasVoice: !!voiceTranscription,
         voiceLength: voiceTranscription.length,
+        voiceProcessingError: !!voiceProcessingError,
         fieldsExtracted: Object.keys(extractedData).length,
-        customerCompany: result.customer_company,
-        serviceType: result.service_type,
-        squareFootage: result.square_footage
+        totalFields: Object.keys(result).length,
+        keyFields: {
+          customerCompany: result.customer_company || '[not found]',
+          serviceType: result.service_type || '[not found]',
+          squareFootage: result.square_footage || '[not found]',
+          poNumber: result.po_number
+        }
       });
       
-      return NextResponse.json(result);
+      // Include debug information in response for troubleshooting
+      const response = {
+        ...result,
+        _debug: {
+          requestId,
+          processing: {
+            pdfProcessed: true,
+            voiceProcessed: !!voiceTranscription,
+            voiceError: voiceProcessingError,
+            fieldsExtracted: Object.keys(extractedData).length,
+            totalFields: Object.keys(result).length
+          }
+        }
+      };
       
-    } catch (openAIError: any) {
-      console.error('OpenAI API error:', openAIError);
+      return NextResponse.json(response);
       
-      if (openAIError.code === 'invalid_request_error') {
+    } catch (processingError: any) {
+      console.error(`[${requestId}] Processing error in combined extraction:`, {
+        message: processingError.message,
+        code: processingError.code,
+        type: processingError.type,
+        stack: processingError.stack?.substring(0, 500)
+      });
+      
+      // Determine error type and provide specific feedback
+      if (processingError.code === 'invalid_request_error') {
         return NextResponse.json({ 
-          error: 'Invalid file format',
-          details: 'Please check that the PDF is valid and voice recording is in a supported format'
+          error: 'Invalid request to AI service',
+          details: processingError.message || 'The file format may not be supported',
+          debugInfo: {
+            requestId,
+            errorCode: processingError.code,
+            errorType: processingError.type
+          }
         }, { status: 400 });
       }
       
+      if (processingError.code === 'rate_limit_exceeded') {
+        return NextResponse.json({ 
+          error: 'Service rate limit exceeded',
+          details: 'Too many requests. Please wait before trying again.',
+          retryAfter: 60
+        }, { status: 429 });
+      }
+      
+      if (processingError.message?.includes('timeout')) {
+        return NextResponse.json({ 
+          error: 'Processing timeout',
+          details: 'The document processing took too long. Please try with a smaller file.',
+          debugInfo: { requestId }
+        }, { status: 408 });
+      }
+      
       return NextResponse.json({ 
-        error: 'Failed to process documents',
-        details: openAIError.message
+        error: 'Document processing failed',
+        details: processingError.message || 'An unexpected error occurred during processing',
+        debugInfo: {
+          requestId,
+          errorCode: processingError.code,
+          errorType: processingError.type,
+          stage: 'document-processing'
+        }
       }, { status: 500 });
     }
     
   } catch (error: any) {
-    console.error('Request processing error:', error);
+    console.error(`[${requestId}] Unexpected request error:`, {
+      message: error.message,
+      name: error.name,
+      code: error.code,
+      stack: error.stack?.substring(0, 1000)
+    });
+    
     return NextResponse.json({ 
-      error: error.message || 'Failed to process documents',
-      stack: error.stack
+      error: 'Unexpected server error',
+      details: error.message || 'An unexpected error occurred while processing your request',
+      debugInfo: {
+        requestId,
+        errorName: error.name,
+        stage: 'request-processing'
+      }
     }, { status: 500 });
   }
 }

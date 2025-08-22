@@ -249,28 +249,67 @@ export function POBuilder() {
       }
       
       if (!response.ok) {
-        logger.error('Error response from server', { data });
+        logger.error('Error response from server', { 
+          status: response.status,
+          statusText: response.statusText,
+          data 
+        });
         
-        // Show debug info if available
-        if (data.debug) {
-          console.error('=== DEBUG INFO ===');
-          console.error(JSON.stringify(data.debug, null, 2));
-          console.error('==================');
+        // Show enhanced debug info if available
+        if (data.debugInfo) {
+          console.error('=== ENHANCED DEBUG INFO ===');
+          console.error(JSON.stringify(data.debugInfo, null, 2));
+          if (data.details) {
+            console.error('Error Details:', data.details);
+          }
+          console.error('========================');
         }
         
-        throw new Error(data.error || 'Failed to parse PDF');
+        // Provide more specific error messages based on status code
+        let errorMessage = data.error || 'Failed to parse PDF';
+        if (data.details) {
+          errorMessage = `${errorMessage}: ${data.details}`;
+        }
+        
+        // Handle specific error cases
+        if (response.status === 413) {
+          errorMessage = 'File too large. Please try with a smaller PDF.';
+        } else if (response.status === 429) {
+          errorMessage = 'Service is busy. Please wait a moment and try again.';
+        } else if (response.status === 408) {
+          errorMessage = 'Processing timeout. Please try with a smaller or simpler PDF.';
+        }
+        
+        throw new Error(errorMessage);
       }
       
-      logger.info('Successfully parsed data', { data });
-      setFields(data);
-      toast.success('PDF parsed successfully!');
+      // Remove debug info from the fields before setting
+      const { _debug, ...cleanData } = data;
+      
+      logger.info('Successfully parsed data', { 
+        fieldsCount: Object.keys(cleanData).length,
+        debugInfo: _debug,
+        hasVoiceProcessing: _debug?.processing?.voiceProcessed
+      });
+      
+      setFields(cleanData);
+      
+      // Show success message with additional context
+      let successMessage = 'PDF parsed successfully!';
+      if (_debug?.processing?.voiceProcessed) {
+        successMessage = 'PDF and voice note processed successfully!';
+      } else if (_debug?.processing?.voiceError) {
+        successMessage = 'PDF processed successfully! (Voice note failed but PDF extraction completed)';
+      }
+      
+      toast.success(successMessage);
     } catch (error: any) {
       logger.error('Upload error', { 
         message: error.message,
         stack: error.stack
       });
       
-      // Report error to server
+      // Report error to server with enhanced context
       try {
         await fetch('/api/errors/report', {
           method: 'POST',
@@ -284,12 +323,16 @@ export function POBuilder() {
             context: {
               fileName: file.name,
               fileSize: file.size,
-              fileType: file.type
+              fileType: file.type,
+              hasVoiceFile: !!voiceBlob,
+              voiceFileSize: voiceBlob?.size,
+              userAgent: navigator.userAgent,
+              timestamp: new Date().toISOString()
             }
           })
         });
       } catch (e) {
-        // Ignore error reporting failures
+        logger.warn('Failed to report error to server', e);
       }
       
       toast.error(error.message || 'Failed to parse PDF');
