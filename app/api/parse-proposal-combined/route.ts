@@ -105,64 +105,88 @@ export async function POST(request: NextRequest) {
       
       let pdfContent = '';
       
+      // Variables for cleanup
+      let uploadedFile: any = null;
+      let assistant: any = null;
+      let thread: any = null;
+      
       try {
-        // Use OpenAI file upload API for reliable PDF processing
-        console.log(`[${requestId}] Uploading PDF to OpenAI for processing...`);
+        // Force pdf-parse to bypass debug mode by manipulating module context
+        console.log(`[${requestId}] Processing PDF via pdf-parse with debug mode override...`);
         
-        const openaiFile = await openai.files.create({
-          file: file,
-          purpose: 'assistants'
-        });
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
         
-        console.log(`[${requestId}] PDF uploaded to OpenAI:`, {
-          fileId: openaiFile.id,
-          filename: openaiFile.filename,
-          bytes: openaiFile.bytes
-        });
-        
-        // Wait a moment for file processing
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Extract content using GPT-4 with the file
-        const fileContentResponse = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a document text extractor. Extract all text content from the uploaded PDF file and return it exactly as it appears in the document.'
-            },
-            {
-              role: 'user',
-              content: `Please extract all text content from the uploaded PDF file (${openaiFile.id}). Return the complete text as it appears in the document.`
-            }
-          ],
-          temperature: 0,
-          max_tokens: 4000
-        });
-        
-        pdfContent = fileContentResponse.choices[0]?.message?.content || '';
+        try {
+          // Direct approach: Import pdf-parse library internals to bypass debug mode
+          const path = require('path');
+          const fs = require('fs');
+          
+          // Import the actual PDF parsing library directly from lib folder
+          const pdfParseLib = require('pdf-parse/lib/pdf-parse.js');
+          
+          console.log(`[${requestId}] Using direct pdf-parse library import to avoid debug mode...`);
+          
+          const parsed = await pdfParseLib(buffer);
+          pdfContent = parsed.text || '';
+          
+          console.log(`[${requestId}] PDF parsed successfully via direct lib import:`, {
+            contentLength: pdfContent.length,
+            pages: parsed.numpages,
+            preview: pdfContent.substring(0, 200) + (pdfContent.length > 200 ? '...' : '')
+          });
+          
+        } catch (pdfParseError: any) {
+          console.warn(`[${requestId}] Direct pdf-parse failed, using basic text extraction:`, pdfParseError.message);
+          
+          // Final fallback: Return clear failure message so AI doesn't hallucinate
+          pdfContent = `[PDF_EXTRACTION_FAILED] Unable to extract text from "${file.name}". The PDF may be scanned, password-protected, or corrupted. Please provide a text-based PDF with selectable content.`;
+          
+          console.log(`[${requestId}] Using clear extraction failure message`);
+        }
         
         console.log(`[${requestId}] PDF content extraction completed:`, {
           contentLength: pdfContent.length,
           preview: pdfContent.substring(0, 200) + (pdfContent.length > 200 ? '...' : '')
         });
         
-        // Clean up the uploaded file
-        try {
-          await openai.files.delete(openaiFile.id);
-          console.log(`[${requestId}] Cleaned up OpenAI file: ${openaiFile.id}`);
-        } catch (cleanupError) {
-          console.warn(`[${requestId}] Failed to cleanup OpenAI file:`, cleanupError);
-        }
+        // Enhanced logging for debugging PDF content issues
+        console.log(`[${requestId}] PDF extraction success - Content preview:`, {
+          hasContent: pdfContent.length > 0,
+          startsWithExpected: pdfContent.toLowerCase().includes('tcs floor service') || pdfContent.toLowerCase().includes('customer information'),
+          containsKeywords: {
+            company: pdfContent.toLowerCase().includes('meridian') || pdfContent.toLowerCase().includes('business center'),
+            service: pdfContent.toLowerCase().includes('floor stripping') || pdfContent.toLowerCase().includes('waxing'),
+            pricing: pdfContent.toLowerCase().includes('$') || pdfContent.toLowerCase().includes('total'),
+            contact: pdfContent.toLowerCase().includes('sarah') || pdfContent.toLowerCase().includes('johnson')
+          }
+        });
         
         if (!pdfContent || pdfContent.trim().length < 10) {
-          console.warn(`[${requestId}] PDF content extraction yielded minimal content:`, {
+          console.error(`[${requestId}] CRITICAL: PDF content extraction yielded minimal content:`, {
             contentLength: pdfContent.length,
-            content: pdfContent
+            content: pdfContent,
+            fileInfo: {
+              name: file.name,
+              size: file.size,
+              type: file.type
+            },
+            assistantInfo: {
+              assistantId: assistant?.id,
+              threadId: thread?.id,
+              runStatus: runStatus?.status
+            }
           });
           return NextResponse.json({ 
-            error: 'PDF content extraction failed',
-            details: 'The PDF appears to be empty, corrupted, or contains only images/scanned content that cannot be read.'
+            error: 'PDF content extraction failed - No readable text found',
+            details: 'The PDF appears to be empty, corrupted, password-protected, or contains only images/scanned content that cannot be read. Please ensure the PDF contains selectable text.',
+            debugInfo: {
+              requestId,
+              fileSize: file.size,
+              fileName: file.name,
+              extractedLength: pdfContent.length,
+              stage: 'pdf-text-extraction'
+            }
           }, { status: 400 });
         }
         
@@ -172,6 +196,13 @@ export async function POST(request: NextRequest) {
           error: 'Failed to process PDF',
           details: pdfError.message || 'The PDF file may be corrupted, password-protected, or in an unsupported format'
         }, { status: 400 });
+      } finally {
+        // Clean up OpenAI resources if used
+        if (uploadedFile && openai) {
+          openai.files.delete(uploadedFile.id).catch((err: any) => 
+            console.warn(`[${requestId}] Failed to delete file:`, err)
+          );
+        }
       }
       
       // Step 2: Process voice transcription if provided
@@ -222,12 +253,17 @@ export async function POST(request: NextRequest) {
         voiceProcessingError: !!voiceProcessingError
       });
       
+      // Enhanced PDF content validation
+      console.log(`[${requestId}] Preparing extraction with PDF content length: ${pdfContent.length}`);
+      
       const extractionPrompt = `You are a floor service operations expert who extracts structured data from proposal documents to create detailed purchase orders.
 
 PRIMARY DATA SOURCE - PDF DOCUMENT CONTENT:
-"${pdfContent.substring(0, 6000)}${pdfContent.length > 6000 ? '...[content truncated]' : ''}"
+"${pdfContent.substring(0, 8000)}${pdfContent.length > 8000 ? '...[content truncated]' : ''}"
 
 CRITICAL INSTRUCTION: The PDF document above is your PRIMARY and MAIN data source. Extract ALL information from this PDF first.
+
+PDF CONTENT VALIDATION: This PDF content should contain floor service proposal information including customer details, service specifications, pricing, and contact information. If this content appears to be placeholder text or unrelated to floor services, return an error.
 
 ${voiceTranscription ? `SUPPLEMENTARY VOICE CONTEXT (Use ONLY to enhance/clarify PDF data):
 "${voiceTranscription}"
@@ -365,6 +401,7 @@ REMEMBER: Extract primarily from PDF document content. Voice is supplementary en
       console.log(`[${requestId}] Combined extraction completed successfully:`, {
         pdfName: file.name,
         pdfSize: file.size,
+        pdfContentLength: pdfContent.length,
         hasVoice: !!voiceTranscription,
         voiceLength: voiceTranscription.length,
         voiceProcessingError: !!voiceProcessingError,
@@ -374,21 +411,41 @@ REMEMBER: Extract primarily from PDF document content. Voice is supplementary en
           customerCompany: result.customer_company || '[not found]',
           serviceType: result.service_type || '[not found]',
           squareFootage: result.square_footage || '[not found]',
+          total: result.total || '[not found]',
+          city: result.city || '[not found]',
           poNumber: result.po_number
+        },
+        extractionQuality: {
+          hasCustomerInfo: !!(result.customer_company && result.customer_company.length > 0),
+          hasServiceInfo: !!(result.service_type && result.service_type.length > 0),
+          hasPricing: !!(result.total && result.total.length > 0),
+          hasLocation: !!(result.city && result.city.length > 0)
         }
       });
       
-      // Include debug information in response for troubleshooting
+      // Include enhanced debug information in response for troubleshooting
       const response = {
         ...result,
         _debug: {
           requestId,
           processing: {
             pdfProcessed: true,
+            pdfContentLength: pdfContent.length,
             voiceProcessed: !!voiceTranscription,
             voiceError: voiceProcessingError,
             fieldsExtracted: Object.keys(extractedData).length,
             totalFields: Object.keys(result).length
+          },
+          pdfExtraction: {
+            fileName: file.name,
+            fileSize: file.size,
+            contentExtracted: pdfContent.length > 0,
+            keyDataFound: {
+              hasCustomer: !!(result.customer_company && result.customer_company.length > 0),
+              hasService: !!(result.service_type && result.service_type.length > 0),
+              hasPricing: !!(result.total && result.total.length > 0),
+              hasAddress: !!(result.project_address && result.project_address.length > 0)
+            }
           }
         }
       };
