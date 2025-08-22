@@ -15,10 +15,14 @@ const logger = new Logger('po-builder');
 type FieldKey = 
   | 'po_date' | 'po_number' | 'customer_first_name' | 'customer_last_name'
   | 'customer_company' | 'onsite_contact_name' | 'onsite_contact_phone'
-  | 'customer_phone' | 'customer_email' | 'billing_address' | 'project_address'
+  | 'customer_phone' | 'project_address'
   | 'city' | 'state' | 'zip' | 'service_type' | 'service_description' | 'floor_type' | 'square_footage'
-  | 'unit_price' | 'subtotal' | 'tax' | 'total' | 'timeline'
-  | 'requested_service_date' | 'special_requirements' | 'doc_reference' | 'notes';
+  | 'timeline' | 'requested_service_date' | 'special_requirements' | 'doc_reference' | 'notes'
+  | 'subcontractor_company' | 'subcontractor_contact' | 'subcontractor_phone' | 'subcontractor_email'
+  | 'subcontractor_address' | 'subcontractor_city' | 'subcontractor_state' | 'subcontractor_zip'
+  | 'line_item_1_desc' | 'line_item_1_price' | 'line_item_2_desc' | 'line_item_2_price'
+  | 'line_item_3_desc' | 'line_item_3_price' | 'line_item_4_desc' | 'line_item_4_price'
+  | 'line_item_5_desc' | 'line_item_5_price' | 'total';
 
 type POFields = Record<FieldKey, string>;
 
@@ -31,9 +35,7 @@ const fieldLabels: Record<FieldKey, string> = {
   onsite_contact_name: 'Onsite Contact Name',
   onsite_contact_phone: 'Onsite Contact Phone',
   customer_phone: 'Customer Phone',
-  customer_email: 'Customer Email',
-  billing_address: 'Billing Address',
-  project_address: 'Project Address',
+  project_address: 'Job Site Address',
   city: 'City',
   state: 'State',
   zip: 'ZIP Code',
@@ -41,29 +43,55 @@ const fieldLabels: Record<FieldKey, string> = {
   service_description: 'Service Description',
   floor_type: 'Floor Type',
   square_footage: 'Square Footage',
-  unit_price: 'Unit Price (per sq ft)',
-  subtotal: 'Subtotal',
-  tax: 'Tax',
-  total: 'Total',
   timeline: 'Timeline',
   requested_service_date: 'Requested Service Date',
   special_requirements: 'Special Requirements',
   doc_reference: 'Document Reference',
-  notes: 'Notes'
+  notes: 'Notes',
+  subcontractor_company: 'Subcontractor Company Name',
+  subcontractor_contact: 'Subcontractor Contact Name',
+  subcontractor_phone: 'Subcontractor Phone',
+  subcontractor_email: 'Subcontractor Email',
+  subcontractor_address: 'Subcontractor Address',
+  subcontractor_city: 'Subcontractor City',
+  subcontractor_state: 'Subcontractor State',
+  subcontractor_zip: 'Subcontractor ZIP',
+  line_item_1_desc: 'Line Item 1 Description',
+  line_item_1_price: 'Line Item 1 Price',
+  line_item_2_desc: 'Line Item 2 Description',
+  line_item_2_price: 'Line Item 2 Price',
+  line_item_3_desc: 'Line Item 3 Description',
+  line_item_3_price: 'Line Item 3 Price',
+  line_item_4_desc: 'Line Item 4 Description',
+  line_item_4_price: 'Line Item 4 Price',
+  line_item_5_desc: 'Line Item 5 Description',
+  line_item_5_price: 'Line Item 5 Price',
+  total: 'Total'
 };
 
 const fieldGroups = {
   'PO Information': ['po_date', 'po_number', 'doc_reference'] as FieldKey[],
+  'Subcontractor Information': [
+    'subcontractor_company', 'subcontractor_contact', 'subcontractor_phone', 'subcontractor_email',
+    'subcontractor_address', 'subcontractor_city', 'subcontractor_state', 'subcontractor_zip'
+  ] as FieldKey[],
   'Customer Details': [
     'customer_first_name', 'customer_last_name', 'customer_company',
-    'customer_phone', 'customer_email'
+    'customer_phone'
   ] as FieldKey[],
-  'Addresses': ['billing_address', 'project_address', 'city', 'state', 'zip'] as FieldKey[],
+  'Job Site Location': ['project_address', 'city', 'state', 'zip'] as FieldKey[],
   'Onsite Contact': ['onsite_contact_name', 'onsite_contact_phone'] as FieldKey[],
   'Service Information': [
     'service_type', 'service_description', 'floor_type', 'square_footage', 'timeline', 'requested_service_date'
   ] as FieldKey[],
-  'Pricing': ['unit_price', 'subtotal', 'tax', 'total'] as FieldKey[],
+  'Sub Contractor Pricing': [
+    'line_item_1_desc', 'line_item_1_price',
+    'line_item_2_desc', 'line_item_2_price',
+    'line_item_3_desc', 'line_item_3_price',
+    'line_item_4_desc', 'line_item_4_price',
+    'line_item_5_desc', 'line_item_5_price',
+    'total'
+  ] as FieldKey[],
   'Additional': ['special_requirements', 'notes'] as FieldKey[]
 };
 
@@ -74,6 +102,20 @@ export function POBuilder() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Calculate total from line items
+  const calculateTotal = useCallback(() => {
+    if (!fields) return '0.00';
+    let total = 0;
+    for (let i = 1; i <= 5; i++) {
+      const priceKey = `line_item_${i}_price` as FieldKey;
+      const price = parseFloat(String(fields[priceKey] || '0').replace(/[$,]/g, ''));
+      if (!isNaN(price)) {
+        total += price;
+      }
+    }
+    return total.toFixed(2);
+  }, [fields]);
   
   // Load draft on component mount
   useEffect(() => {
@@ -223,7 +265,25 @@ export function POBuilder() {
   };
 
   const handleFieldChange = (key: FieldKey, value: string) => {
-    setFields(prev => prev ? { ...prev, [key]: value } : null);
+    setFields(prev => {
+      if (!prev) return null;
+      const updated = { ...prev, [key]: value };
+      
+      // Auto-calculate total when any line item price changes
+      if (key.includes('line_item_') && key.includes('_price')) {
+        let total = 0;
+        for (let i = 1; i <= 5; i++) {
+          const priceKey = `line_item_${i}_price` as FieldKey;
+          const price = parseFloat(String(updated[priceKey] || '0').replace(/[$,]/g, ''));
+          if (!isNaN(price)) {
+            total += price;
+          }
+        }
+        updated.total = total.toFixed(2);
+      }
+      
+      return updated;
+    });
   };
   
   const clearDraft = useCallback(() => {
@@ -305,7 +365,7 @@ export function POBuilder() {
                     />
                     <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                     <p className="text-sm font-medium">
-                      {file ? file.name : 'Click to upload or drag and drop'}
+                      {file ? file.name : 'Click to select a file'}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       PDF files only
@@ -367,10 +427,12 @@ export function POBuilder() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {groupFields.map((key) => {
                     const isLargeField = ['service_description', 'special_requirements', 'notes'].includes(key);
-                    const isFullWidth = isLargeField || key === 'billing_address' || key === 'project_address';
+                    const isFullWidth = isLargeField || key === 'project_address' || key === 'subcontractor_address' || key === 'total';
+                    const isLineItemDesc = key.includes('line_item_') && key.includes('_desc');
+                    const isPrice = key.includes('_price') || key === 'total';
                     
                       return (
-                        <div key={key} className={`space-y-2 ${isFullWidth ? 'md:col-span-2' : ''}`}>
+                        <div key={key} className={`space-y-2 ${isFullWidth ? 'md:col-span-2' : ''} ${isLineItemDesc ? 'md:col-span-2 lg:col-span-1' : ''}`}>
                           <Label htmlFor={key} className="text-sm font-medium">
                             {fieldLabels[key]}
                           </Label>
@@ -382,13 +444,22 @@ export function POBuilder() {
                               className="min-h-[100px] text-sm"
                               placeholder={key === 'service_description' ? 'Describe the service in detail...' : ''}
                             />
+                          ) : key === 'total' ? (
+                            <Input
+                              id={key}
+                              type="text"
+                              value={`$${calculateTotal()}`}
+                              disabled
+                              className="text-sm font-bold bg-muted"
+                            />
                           ) : (
                             <Input
                               id={key}
-                              type={key.includes('date') ? 'date' : 'text'}
+                              type={key.includes('date') ? 'date' : isPrice ? 'text' : 'text'}
                               value={fields[key] || ''}
                               onChange={(e) => handleFieldChange(key, e.target.value)}
                               className="text-sm"
+                              placeholder={isPrice ? '$0.00' : ''}
                             />
                           )}
                         </div>
