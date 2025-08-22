@@ -100,29 +100,45 @@ export async function POST(request: NextRequest) {
     });
     
     try {
-      // Step 1: Extract PDF text
+      // Step 1: Extract PDF text using pdf-parse
       console.log(`[${requestId}] Starting PDF text extraction...`);
       
-      let arrayBuffer;
-      let buffer;
+      let pdfText = '';
       
       try {
-        arrayBuffer = await file.arrayBuffer();
-        buffer = Buffer.from(arrayBuffer);
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
         console.log(`[${requestId}] PDF buffer created successfully, size: ${buffer.length} bytes`);
-      } catch (bufferError: any) {
-        console.error(`[${requestId}] Failed to read PDF file:`, bufferError);
+        
+        // Extract text from PDF using pdf-parse (same approach as simple-pdf-test)
+        const pdfParse = (await import('pdf-parse')).default;
+        const parsed = await pdfParse(buffer);
+        pdfText = parsed.text || '';
+        
+        console.log(`[${requestId}] PDF text extraction completed:`, {
+          textLength: pdfText.length,
+          pages: parsed.numpages,
+          preview: pdfText.substring(0, 200) + (pdfText.length > 200 ? '...' : '')
+        });
+        
+        if (!pdfText || pdfText.trim().length < 10) {
+          console.warn(`[${requestId}] PDF text extraction yielded minimal content:`, {
+            textLength: pdfText.length,
+            content: pdfText
+          });
+          return NextResponse.json({ 
+            error: 'PDF text extraction failed',
+            details: 'The PDF appears to be empty, corrupted, or contains only images/scanned content that cannot be read as text.'
+          }, { status: 400 });
+        }
+        
+      } catch (pdfError: any) {
+        console.error(`[${requestId}] PDF parsing failed:`, pdfError);
         return NextResponse.json({ 
-          error: 'Failed to read PDF file',
-          details: 'The uploaded file may be corrupted or invalid'
+          error: 'Failed to extract text from PDF',
+          details: 'The PDF file may be corrupted, password-protected, or in an unsupported format'
         }, { status: 400 });
       }
-      
-      // Use OpenAI's vision model to extract text from PDF
-      const base64Pdf = buffer.toString('base64');
-      const dataUrl = `data:application/pdf;base64,${base64Pdf}`;
-      
-      console.log(`[${requestId}] PDF converted to base64, length: ${base64Pdf.length} chars`);
       
       // Step 2: Process voice transcription if provided
       let voiceTranscription = '';
@@ -179,8 +195,11 @@ ${voiceTranscription ? `VOICE TRANSCRIPTION CONTEXT:
 
 VOICE GUIDANCE: Use the voice recording above to provide additional context, fill missing details, or clarify ambiguous information from the PDF. The voice note may contain customer preferences, site logistics, timing details, or special requirements not in the PDF.` : ''}
 
+PDF DOCUMENT CONTENT:
+"${pdfText.substring(0, 6000)}${pdfText.length > 6000 ? '...[content truncated]' : ''}"
+
 EXTRACTION TASK:
-Extract all relevant information from the proposal PDF${voiceTranscription ? ' and voice context' : ''} to populate purchase order fields. Focus on:
+Extract all relevant information from the proposal PDF text${voiceTranscription ? ' and voice context' : ''} to populate purchase order fields. Focus on:
 
 PRIMARY DATA SOURCES:
 1. Customer Information: Company name, contacts, phone numbers, addresses
@@ -198,7 +217,7 @@ ${voiceTranscription ? `VOICE-ENHANCED EXTRACTION RULES:
 - Combine both sources for maximum context and completeness` : ''}
 
 EXTRACTION PRIORITIES:
-1. Parse all text content from the PDF proposal
+1. Parse all text content from the PDF proposal above
 2. Identify customer company, contact person, phone/email
 3. Extract job site address and location details
 4. Determine floor type (VCT, carpet, hard surface, etc.) and square footage
@@ -211,7 +230,7 @@ EXTRACTION PRIORITIES:
 Return ONLY valid JSON using this exact schema:
 ${JSON.stringify(FIELD_SCHEMA, null, 2)}
 
-Extract comprehensive data from the proposal${voiceTranscription ? ' and voice context' : ''}:`;
+Extract comprehensive data from the PDF text${voiceTranscription ? ' and voice context' : ''}:`;
 
       let completion;
       try {
@@ -226,10 +245,7 @@ Extract comprehensive data from the proposal${voiceTranscription ? ' and voice c
             },
             { 
               role: 'user', 
-              content: [
-                { type: 'text', text: extractionPrompt },
-                { type: 'image_url', image_url: { url: dataUrl } }
-              ]
+              content: extractionPrompt
             }
           ],
           temperature: 0,

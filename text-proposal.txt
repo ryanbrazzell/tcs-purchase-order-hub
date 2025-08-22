@@ -1,0 +1,50 @@
+FLOOR SERVICE PROPOSAL
+
+Customer Information:
+Company: ABC Company Inc.
+Contact: John Smith
+Phone: (555) 123-4567
+Email: john@abccompany.com
+
+Job Site Details:
+Address: 123 Main Street
+City: Anytown
+State: CA
+ZIP: 90210
+
+Service Specifications:
+Service Type: Commercial floor maintenance
+Floor Type: VCT Tile
+Square Footage: 5,000 sq ft
+Service Description: Strip, wax, and polish VCT flooring in main office area
+
+Timeline and Scheduling:
+Timeline: 2 weeks from approval
+Requested Service Date: 2024-01-15
+Preferred Time: After hours (6 PM - 6 AM)
+
+Pricing Information:
+Line Item 1: Floor stripping - $1,200.00
+Line Item 2: Wax application - $800.00
+Line Item 3: Polish finish - $400.00
+Line Item 4: Equipment rental - $200.00
+
+Subtotal: $2,600.00
+Tax: $208.00
+Total: $2,808.00
+
+Special Requirements:
+- Work after hours only
+- Building access required
+- All furniture must be moved back to original positions
+- Final inspection required before completion
+
+Subcontractor Information:
+Company: Premium Floor Care LLC
+Contact: Mike Johnson
+Phone: (555) 987-6543
+Email: mike@premiumfloor.com
+Address: 456 Industrial Blvd, Service City, CA 90211
+
+This proposal is valid for 30 days from the date of issuance.
+Please contact us with any questions or to schedule the work.
