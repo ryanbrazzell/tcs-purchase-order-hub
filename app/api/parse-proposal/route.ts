@@ -115,13 +115,14 @@ export async function POST(request: NextRequest) {
 
 CRITICAL TASK: Extract customer package selections and convert them into specific, actionable work orders for expert floor maintenance subcontractors.
 
-ANALYSIS WORKFLOW:
-1. IDENTIFY SELECTED PACKAGES: Look for "Package Selection", "Service Selection", or similar sections showing what the customer chose
-2. CROSS-REFERENCE DETAILS: Match selected packages with detailed service descriptions elsewhere in the proposal
-3. EXTRACT ADD-ONS: Identify any optional services or modifications selected
-4. CALCULATE SPECIFICATIONS: Determine square footage, materials, and techniques required
-5. EXTRACT SITE NUANCES: Capture ALL logistical details, timing restrictions, and customer-specific requirements
-6. GENERATE WORK INSTRUCTIONS: Create detailed, step-by-step contractor instructions
+CRITICAL ANALYSIS WORKFLOW:
+1. IDENTIFY SPECIFIC PACKAGE NUMBERS: Look for "Package 1", "Package 2", "Package 3" etc. and identify EXACTLY which package number is selected
+2. IDENTIFY SELECTED OPTIONS: Within the chosen package, identify specific options like "Option 3", "Option 4" that are marked as selected
+3. EXTRACT ONLY SELECTED ITEMS: Only extract pricing and details for the specific package number and options that are actually selected
+4. CROSS-REFERENCE PACKAGE DETAILS: Match the selected package number with its detailed service descriptions
+5. CALCULATE SPECIFICATIONS: Use only the selected package's square footage, materials, and pricing
+6. EXTRACT SITE NUANCES: Capture ALL logistical details, timing restrictions, and customer-specific requirements
+7. GENERATE WORK INSTRUCTIONS: Create detailed instructions based ONLY on the selected package and options
 
 FLOOR SERVICE KNOWLEDGE BASE:
 - VCT Flooring: Requires stripping (high-quality commercial-grade strippers), cleaning, multiple finish coats (2-4 typically), buffing
@@ -140,11 +141,13 @@ SITE-SPECIFIC DETAILS TO PRESERVE:
 - Customer preferences and concerns
 - Special handling requirements
 
-TRANSFORMATION RULES:
-- "Premium Floor Care Package" → Detailed VCT stripping protocol with premium finish (3-4 coats)
-- "Standard Maintenance" → Regular cleaning with standard materials (2-3 coats)
-- "Deep Clean Service" → Complete strip and refinish with specific requirements
-- Always include: square footage, specific materials, number of coats, completion criteria, site logistics
+PACKAGE SELECTION RULES:
+- Look for checkmarks (✓), [X], highlighting, circles, or "SELECTED" text next to package numbers
+- "Package 1" selected → Extract only Package 1 pricing and services
+- "Package 2, Options 3+4" selected → Extract Package 2 base + Options 3 and 4 pricing
+- "Package 3" selected → Extract only Package 3 pricing and services
+- CRITICAL: If multiple packages are shown but only one is selected, ignore the unselected packages completely
+- Always verify package number matches selection indicators before extracting pricing
 
 Return ONLY valid JSON using this schema:
 ${JSON.stringify(FIELD_SCHEMA, null, 2)}
@@ -157,8 +160,11 @@ For service_description field, provide comprehensive subcontractor work instruct
 - All site-specific logistics and customer requirements from the proposal
 
 EXAMPLE TRANSFORMATION:
-Customer sees: "Premium Floor Care Package for 5,000 sq ft office. Work on weekend only. Move furniture to conference room. Use low-odor products."
-Subcontractor gets: "Strip 5,000 sq ft VCT flooring using high-quality commercial-grade stripper. Clean thoroughly, apply 3 coats high-traffic floor finish with 2-hour cure time between coats. Buff to high-gloss finish. LOGISTICS: Weekend work only. Move all furniture to conference room before starting. Use low-odor products due to customer requirement. Estimated time: 8-10 hours over 2 days."
+Proposal shows: "Package 1: Basic Service $2,000 [not selected] | Package 2: Premium Service $4,500 ✓ SELECTED + Option 3: Extra Wax $300 ✓ + Option 4: Weekend Work $200 ✓"
+Extraction result: Only extract Package 2 ($4,500) + Option 3 ($300) + Option 4 ($200) = Total $5,000. IGNORE Package 1 completely.
+Subcontractor gets: "Premium Service with extra wax coating and weekend scheduling. LOGISTICS: Weekend work as selected in Option 4..."
+
+CRITICAL: If proposal shows multiple packages but customer selected "Package 2, Options 3 and 4" - extract ONLY Package 2 base price + Option 3 price + Option 4 price. Do NOT include pricing from Package 1 or Package 3.
 
 Document text:
 ${truncatedText}`;

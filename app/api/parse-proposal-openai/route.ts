@@ -123,11 +123,12 @@ CRITICAL OBJECTIVES:
 
 ANALYSIS STEPS:
 
-STEP 1 - PACKAGE IDENTIFICATION:
-- Find "Package Selection" or similar sections
-- Identify chosen service levels (Basic/Standard/Premium)
-- Note specific floor types (VCT, carpet, hard surface)
-- Record square footage for each area
+STEP 1 - SPECIFIC PACKAGE IDENTIFICATION:
+- Find sections with numbered packages ("Package 1", "Package 2", "Package 3", etc.)
+- Look for selection indicators: checkmarks (✓), [X], highlighting, circles, "SELECTED" text
+- Identify the EXACT package number that is selected (e.g., "Package 2")
+- Within selected package, identify specific options selected (e.g., "Option 3", "Option 4")
+- CRITICAL: Only extract data from the selected package number, ignore all other packages
 
 STEP 2 - SERVICE TRANSLATION:
 Transform customer packages using this knowledge:
@@ -142,7 +143,14 @@ SERVICE LEVELS:
 • Standard: Standard materials, normal coat application, regular maintenance
 • Basic: Economy materials, minimum coats, basic maintenance
 
-STEP 3 - SITE-SPECIFIC DETAILS:
+STEP 3 - SELECTED PACKAGE PRICING:
+Extract pricing ONLY from the selected package:
+- Base price for selected package number
+- Additional costs for selected options within that package
+- IGNORE pricing from unselected packages
+- Calculate total based only on selected items
+
+STEP 4 - SITE-SPECIFIC DETAILS:
 Extract and preserve ALL logistical requirements:
 - Furniture/equipment moving (what, who, where)
 - Access coordination (keys, codes, security, timing)
@@ -151,7 +159,7 @@ Extract and preserve ALL logistical requirements:
 - Protection needs (artwork, electronics, sensitive areas)
 - Customer preferences and special concerns
 
-STEP 4 - WORK ORDER CREATION:
+STEP 5 - WORK ORDER CREATION:
 For each service area, provide:
 - Exact square footage
 - Step-by-step work process
@@ -165,6 +173,17 @@ Return data in this exact JSON format: ${JSON.stringify(FIELD_SCHEMA, null, 2)}
 
 For service_description field, create comprehensive subcontractor instructions like:
 "VCT Floor Renewal - 3,500 sq ft: 1) Strip existing finish using high-quality commercial-grade stripper. 2) Neutralize and clean thoroughly. 3) Apply 3 coats high-traffic floor finish with 2-hour cure between coats. 4) Buff final coat to high-gloss finish. SITE LOGISTICS: Weekend work only. Move all office furniture to hallway before starting. Use low-odor products due to employee sensitivities. Protect reception artwork with plastic sheeting. Time: 10-12 hours over 2 days."
+
+CRITICAL PACKAGE SELECTION EXAMPLE:
+If proposal shows multiple packages like:
+"Package 1: Basic Clean $2,000
+ Package 2: Deep Clean $4,500 ✓ SELECTED
+   → Option 3: Extra Protection $300 ✓
+   → Option 4: Weekend Service $200 ✓
+ Package 3: Premium $6,000"
+
+Extract ONLY: Package 2 base ($4,500) + Option 3 ($300) + Option 4 ($200) = $5,000 total
+IGNORE: Package 1 and Package 3 completely
 
 Focus on being extremely specific - subcontractors are experts but need comprehensive instructions to match exact customer expectations and handle all site-specific requirements.`,
         tools: [{ type: 'file_search' }],

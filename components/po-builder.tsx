@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Loader2, Upload, Download, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Logger } from '@/lib/logger';
+import { ExtractionProgress } from './extraction-progress';
 
 const logger = new Logger('po-builder');
 
@@ -102,6 +103,7 @@ export function POBuilder() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showProgress, setShowProgress] = useState(false);
   
   // Calculate total from line items
   const calculateTotal = useCallback(() => {
@@ -164,6 +166,7 @@ export function POBuilder() {
     if (!file) return;
     
     setIsUploading(true);
+    setShowProgress(true);
     try {
       logger.info('Starting file upload', { name: file.name, size: file.size, type: file.type });
       
@@ -261,6 +264,7 @@ export function POBuilder() {
       toast.error(error.message || 'Failed to parse PDF');
     } finally {
       setIsUploading(false);
+      setShowProgress(false);
     }
   };
 
@@ -494,6 +498,17 @@ export function POBuilder() {
           </div>
         )}
       </div>
+
+      {/* Extraction Progress Modal */}
+      <ExtractionProgress
+        isVisible={showProgress}
+        onComplete={() => {
+          setShowProgress(false);
+          if (fields) {
+            toast.success('PDF parsed successfully! Review the extracted data below.');
+          }
+        }}
+      />
     </div>
   );
 }
