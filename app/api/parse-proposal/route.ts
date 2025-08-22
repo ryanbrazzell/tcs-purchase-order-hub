@@ -5,7 +5,7 @@ const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
-// Field schema
+// Field schema - includes service_description for package selection
 const FIELD_SCHEMA = {
   po_date: '',
   po_number: '',
@@ -22,6 +22,7 @@ const FIELD_SCHEMA = {
   state: '',
   zip: '',
   service_type: '',
+  service_description: '', // This will hold the selected package details
   floor_type: '',
   square_footage: '',
   unit_price: '',
@@ -32,7 +33,27 @@ const FIELD_SCHEMA = {
   requested_service_date: '',
   special_requirements: '',
   doc_reference: '',
-  notes: ''
+  notes: '',
+  // Subcontractor fields (usually filled manually)
+  subcontractor_company: '',
+  subcontractor_contact: '',
+  subcontractor_phone: '',
+  subcontractor_email: '',
+  subcontractor_address: '',
+  subcontractor_city: '',
+  subcontractor_state: '',
+  subcontractor_zip: '',
+  // Line item fields for pricing
+  line_item_1_desc: '',
+  line_item_1_price: '',
+  line_item_2_desc: '',
+  line_item_2_price: '',
+  line_item_3_desc: '',
+  line_item_3_price: '',
+  line_item_4_desc: '',
+  line_item_4_price: '',
+  line_item_5_desc: '',
+  line_item_5_price: ''
 };
 
 export async function POST(request: NextRequest) {
@@ -94,10 +115,17 @@ export async function POST(request: NextRequest) {
 
 ${JSON.stringify(FIELD_SCHEMA, null, 2)}
 
+CRITICAL: Package Selection Extraction
+1. Look for "Package Selection", "Service Selection", or "Choose Your Service" section (usually near the bottom)
+2. Identify which package is SELECTED by the customer (checkmarks, [X], highlighted, circled)
+3. Put the COMPLETE DESCRIPTION of the selected package in "service_description" field
+4. Include all details: what's included, materials, labor, timeline from the selected package
+
 Focus on finding:
 - Customer/facility name (customer_company)
 - Square footage numbers
-- Service type (stripping, waxing, etc)
+- Service type (general category like "Floor Stripping and Waxing")
+- SERVICE_DESCRIPTION: The FULL details of the SELECTED PACKAGE from Package Selection section
 - Pricing (subtotal, tax, total)
 - Addresses and contact info
 
@@ -115,7 +143,7 @@ ${truncatedText}`;
         messages: [
           { 
             role: 'system', 
-            content: 'Extract data from documents into JSON. Return ONLY valid JSON, no other text.' 
+            content: 'You are an expert at extracting data from TCS floor service proposals. Pay special attention to Package Selection sections where customers choose specific service packages. Extract data into JSON format. Return ONLY valid JSON, no other text.' 
           },
           { role: 'user', content: prompt }
         ],
@@ -151,9 +179,18 @@ ${truncatedText}`;
       result.po_number = result.po_number || `PO-${Math.floor(100000 + Math.random() * 900000)}`;
       result.po_date = result.po_date || new Date().toISOString().split('T')[0];
       
+      // If service_description is empty but service_type exists, use service_type as fallback
+      if (!result.service_description && result.service_type) {
+        console.warn('No package selection found, using service_type as fallback');
+        result.service_description = result.service_type;
+      }
+      
       console.log('Extraction complete', { 
         customer_company: result.customer_company,
-        square_footage: result.square_footage
+        square_footage: result.square_footage,
+        service_type: result.service_type,
+        service_description: result.service_description ? 
+          result.service_description.substring(0, 100) + '...' : 'NOT FOUND'
       });
       
       return NextResponse.json(result);

@@ -7,7 +7,7 @@ const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
-// Field schema
+// Field schema - includes service_description for package selection
 const FIELD_SCHEMA = {
   po_date: '',
   po_number: '',
@@ -24,6 +24,7 @@ const FIELD_SCHEMA = {
   state: '',
   zip: '',
   service_type: '',
+  service_description: '', // This will hold the selected package details
   floor_type: '',
   square_footage: '',
   unit_price: '',
@@ -34,7 +35,27 @@ const FIELD_SCHEMA = {
   requested_service_date: '',
   special_requirements: '',
   doc_reference: '',
-  notes: ''
+  notes: '',
+  // Subcontractor fields (usually filled manually)
+  subcontractor_company: '',
+  subcontractor_contact: '',
+  subcontractor_phone: '',
+  subcontractor_email: '',
+  subcontractor_address: '',
+  subcontractor_city: '',
+  subcontractor_state: '',
+  subcontractor_zip: '',
+  // Line item fields for pricing
+  line_item_1_desc: '',
+  line_item_1_price: '',
+  line_item_2_desc: '',
+  line_item_2_price: '',
+  line_item_3_desc: '',
+  line_item_3_price: '',
+  line_item_4_desc: '',
+  line_item_4_price: '',
+  line_item_5_desc: '',
+  line_item_5_price: ''
 };
 
 interface UploadedFile {
@@ -91,7 +112,21 @@ export async function POST(request: NextRequest) {
       // Create an assistant that can read files
       assistant = await openai.beta.assistants.create({
         name: 'PDF Data Extractor',
-        instructions: `You are a data extraction expert. Extract information from the uploaded TCS floor service proposal PDF and return ONLY a JSON object with these exact fields: ${JSON.stringify(FIELD_SCHEMA, null, 2)}. Focus on finding customer/facility name, square footage, service type, pricing, addresses, and contact info.`,
+        instructions: `You are a data extraction expert specializing in TCS floor service proposals. Extract information from the uploaded PDF and return ONLY a JSON object with the exact fields specified.
+
+CRITICAL INSTRUCTIONS FOR PACKAGE SELECTION:
+1. Look for a "Package Selection", "Service Selection", "Selected Package", or "Choose Your Service" section - typically found in the bottom half of the proposal
+2. Identify which package/service option is SELECTED by the customer (look for checkmarks ✓, [X], highlighted, circled, or bold text)
+3. Extract the COMPLETE description of the SELECTED package and put it in the "service_description" field
+4. Include all details about what's included in the selected package (materials, labor, timeline, etc.)
+5. If no package is explicitly selected but there's only one service described, use that as the service_description
+
+FIELD MAPPING:
+- service_type: The general category (e.g., "Floor Stripping and Waxing", "VCT Maintenance")
+- service_description: The FULL DETAILED DESCRIPTION of the SELECTED PACKAGE from the Package Selection section
+- Include pricing breakdown if shown with the selected package
+
+Return data in this exact JSON format: ${JSON.stringify(FIELD_SCHEMA, null, 2)}`,
         tools: [{ type: 'file_search' }],
         model: 'gpt-4o-mini'
       });
@@ -102,7 +137,15 @@ export async function POST(request: NextRequest) {
       const thread = await openai.beta.threads.create({
         messages: [{
           role: 'user',
-          content: 'Please extract all purchase order information from the attached PDF and return it as JSON.',
+          content: `Please extract all purchase order information from the attached PDF. 
+
+PAY SPECIAL ATTENTION TO:
+1. The Package Selection section (usually near the bottom of the proposal)
+2. Which specific package or service option the customer has SELECTED
+3. Extract the COMPLETE description of the selected package for the service_description field
+4. Look for selection indicators like checkmarks, X marks, highlighting, or "SELECTED" text
+
+Return all data as JSON with the exact field names specified.`,
           attachments: [{
             file_id: uploadedFile.id,
             tools: [{ type: 'file_search' }]
@@ -166,6 +209,19 @@ export async function POST(request: NextRequest) {
       const result = { ...FIELD_SCHEMA, ...extractedData };
       result.po_number = result.po_number || `PO-${Math.floor(100000 + Math.random() * 900000)}`;
       result.po_date = result.po_date || new Date().toISOString().split('T')[0];
+      
+      // If service_description is empty but service_type exists, use service_type as fallback
+      if (!result.service_description && result.service_type) {
+        console.warn('No package selection found, using service_type as fallback');
+        result.service_description = result.service_type;
+      }
+      
+      // Log extraction results for monitoring
+      console.log('Extracted service info:', {
+        service_type: result.service_type,
+        service_description: result.service_description ? 
+          result.service_description.substring(0, 100) + '...' : 'NOT FOUND'
+      });
       
       console.log('Extraction complete');
       
