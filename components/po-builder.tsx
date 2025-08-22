@@ -6,10 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
-import { Loader2, Upload, Download, FileText } from 'lucide-react';
+import { Loader2, Upload, Download, FileText, Mic } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Logger } from '@/lib/logger';
 import { ExtractionProgress } from './extraction-progress';
+import { VoiceRecorder } from './voice-recorder';
 
 const logger = new Logger('po-builder');
 
@@ -104,6 +105,39 @@ export function POBuilder() {
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
+  const [inputMode, setInputMode] = useState<'pdf' | 'voice' | 'both'>('pdf');
+  
+  // Stable callback for progress completion
+  const handleProgressComplete = useCallback(() => {
+    setShowProgress(false);
+    if (fields) {
+      toast.success('Data extracted successfully! Review the extracted data below.');
+    }
+  }, [fields]);
+
+  // Handle voice transcription completion
+  const handleVoiceTranscription = useCallback((result: any) => {
+    if (result.success && result.extractedData) {
+      const voiceData = result.extractedData;
+      
+      // Merge with existing PDF data if present
+      if (fields) {
+        // Merge voice data with PDF data (voice data takes precedence for filled fields)
+        const mergedData: POFields = { ...fields };
+        Object.keys(voiceData).forEach(key => {
+          if (voiceData[key] && voiceData[key].trim() !== '') {
+            mergedData[key as FieldKey] = voiceData[key];
+          }
+        });
+        setFields(mergedData);
+        toast.success('Voice data merged with PDF data!');
+      } else {
+        // Set voice data as primary data
+        setFields(voiceData);
+        toast.success('Voice data extracted successfully!');
+      }
+    }
+  }, [fields, setFields]);
   
   // Calculate total from line items
   const calculateTotal = useCallback(() => {
@@ -342,9 +376,50 @@ export function POBuilder() {
           </p>
         </div>
 
-        {/* Upload Section */}
-        <Card className="p-8 border-0 shadow-lg bg-gradient-to-br from-card to-card/95">
-          <div className="space-y-6">
+        {/* Input Mode Selection */}
+        <div className="flex justify-center mb-8">
+          <div className="bg-muted/50 p-1 rounded-lg flex items-center space-x-1">
+            <button
+              onClick={() => setInputMode('pdf')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                inputMode === 'pdf'
+                  ? 'bg-primary text-primary-foreground shadow'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <FileText className="w-4 h-4 mr-2 inline" />
+              PDF Upload
+            </button>
+            <button
+              onClick={() => setInputMode('voice')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                inputMode === 'voice'
+                  ? 'bg-primary text-primary-foreground shadow'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Mic className="w-4 h-4 mr-2 inline" />
+              Voice Input
+            </button>
+            <button
+              onClick={() => setInputMode('both')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                inputMode === 'both'
+                  ? 'bg-primary text-primary-foreground shadow'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <FileText className="w-4 h-4 mr-1 inline" />
+              <Mic className="w-4 h-4 mr-2 inline" />
+              PDF + Voice
+            </button>
+          </div>
+        </div>
+
+        {/* PDF Upload Section */}
+        {(inputMode === 'pdf' || inputMode === 'both') && (
+          <Card className="p-8 border-0 shadow-lg bg-gradient-to-br from-card to-card/95 mb-6">
+            <div className="space-y-6">
             {!fields && (
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 text-center">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -396,8 +471,19 @@ export function POBuilder() {
                 )}
               </Button>
             </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Voice Recording Section */}
+        {(inputMode === 'voice' || inputMode === 'both') && (
+          <div className="mb-6">
+            <VoiceRecorder
+              onTranscriptionComplete={handleVoiceTranscription}
+              isUploading={isUploading}
+            />
           </div>
-        </Card>
+        )}
 
         {/* Fields Editor */}
         {fields && (
@@ -502,12 +588,7 @@ export function POBuilder() {
       {/* Extraction Progress Modal */}
       <ExtractionProgress
         isVisible={showProgress}
-        onComplete={() => {
-          setShowProgress(false);
-          if (fields) {
-            toast.success('PDF parsed successfully! Review the extracted data below.');
-          }
-        }}
+        onComplete={handleProgressComplete}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Brain, Search, CheckCircle, Loader2 } from 'lucide-react';
 
@@ -57,21 +57,42 @@ export function ExtractionProgress({ isVisible, onComplete }: ExtractionProgress
   const [currentStage, setCurrentStage] = useState(0);
   const [progress, setProgress] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasStartedRef = useRef(false);
+
+  // Memoize the onComplete callback to prevent unnecessary re-renders
+  const stableOnComplete = useCallback(() => {
+    onComplete?.();
+  }, [onComplete]);
 
   useEffect(() => {
     if (!isVisible) {
+      // Reset state when hiding and clear any running interval
       setCurrentStage(0);
       setProgress(0);
       setTimeRemaining(0);
+      hasStartedRef.current = false;
+      
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       return;
     }
+
+    // Prevent multiple starts
+    if (hasStartedRef.current) {
+      return;
+    }
+    
+    hasStartedRef.current = true;
 
     // Calculate total duration
     const totalDuration = progressStages.reduce((sum, stage) => sum + stage.duration, 0);
     setTimeRemaining(totalDuration);
 
     let elapsedTime = 0;
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       elapsedTime += 0.1;
       
       // Calculate which stage we're in
@@ -86,29 +107,31 @@ export function ExtractionProgress({ isVisible, onComplete }: ExtractionProgress
         cumulativeDuration += progressStages[i].duration;
       }
 
-      // Update current stage
-      if (stageIndex !== currentStage) {
-        setCurrentStage(stageIndex);
-      }
-
-      // Calculate overall progress
-      const overallProgress = Math.min((elapsedTime / totalDuration) * 100, 100);
-      setProgress(overallProgress);
-      
-      // Update time remaining
+      // Update state in batch to prevent multiple re-renders
+      setCurrentStage(stageIndex);
+      setProgress(Math.min((elapsedTime / totalDuration) * 100, 100));
       setTimeRemaining(Math.max(totalDuration - elapsedTime, 0));
 
       // Complete when done
       if (elapsedTime >= totalDuration) {
-        clearInterval(interval);
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
         setTimeout(() => {
-          onComplete?.();
+          stableOnComplete();
+          hasStartedRef.current = false; // Reset for next time
         }, 500);
       }
     }, 100);
 
-    return () => clearInterval(interval);
-  }, [isVisible, currentStage, onComplete]);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isVisible, stableOnComplete]);
 
   if (!isVisible) return null;
 
