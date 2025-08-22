@@ -322,61 +322,61 @@ export async function POST(request: NextRequest) {
     
     yPos = Math.max(leftY, rightY) + 15;
     
-    // Service Description Section with better styling
-    drawSectionHeader(doc, 'SERVICE DESCRIPTION', margin, yPos, contentWidth);
-    yPos += 10;
-    
-    // Service description with proper text wrapping
+    // Service Description Section with dedicated page allocation for long content
     if (fields.service_description) {
+      const maxWidth = contentWidth - 10;
+      const lineHeight = 5;
+      const descLines = doc.splitTextToSize(fields.service_description, maxWidth);
+      
+      // If description is long (more than 25 lines), give it a dedicated page
+      const isLongDescription = descLines.length > 25;
+      
+      if (isLongDescription || yPos > pageHeight - 150) {
+        // Start service description on a new page
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      drawSectionHeader(doc, 'SERVICE DESCRIPTION', margin, yPos, contentWidth);
+      yPos += 15;
+      
       setColor(doc, COLORS.primary, 'text');
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       
-      // Split text properly for multi-line content
-      const maxWidth = contentWidth - 10;
-      const descLines = doc.splitTextToSize(fields.service_description, maxWidth);
-      
-      // Calculate actual height needed (with proper line spacing)
-      const lineHeight = 5;
-      const padding = 8;
-      const descBoxHeight = Math.max((descLines.length * lineHeight) + padding, 30);
-      
-      // Check if we need a new page
-      if (yPos + descBoxHeight > pageHeight - 40) {
-        doc.addPage();
-        yPos = 20;
-        drawSectionHeader(doc, 'SERVICE DESCRIPTION (continued)', margin, yPos, contentWidth);
-        yPos += 10;
-      }
-      
-      // Draw a subtle border around description
-      setColor(doc, COLORS.border, 'draw');
-      doc.setLineWidth(0.3);
-      doc.rect(margin, yPos - 5, contentWidth, descBoxHeight);
-      
-      // Add the text with proper spacing
+      // Draw the text with automatic page breaks
       let descY = yPos;
-      descLines.forEach((line: string) => {
-        // Check if we need to continue on next page
-        if (descY > pageHeight - 40) {
+      descLines.forEach((line: string, index: number) => {
+        // Check if we need to continue on next page (leave room for footer)
+        if (descY > pageHeight - 80) {
           doc.addPage();
-          yPos = 20;
-          descY = yPos;
-          drawSectionHeader(doc, 'SERVICE DESCRIPTION (continued)', margin, yPos - 10, contentWidth);
+          descY = 30; // Start lower on continuation pages
+          drawSectionHeader(doc, 'SERVICE DESCRIPTION (continued)', margin, 20, contentWidth);
         }
         doc.text(line, margin + 5, descY);
         descY += lineHeight;
       });
-      yPos += descBoxHeight + 10;
+      
+      // Add some space after description
+      yPos = descY + 20;
+      
+      // If we used a lot of space, start pricing on a new page
+      if (yPos > pageHeight - 120) {
+        doc.addPage();
+        yPos = 20;
+      }
     } else {
+      // Short message for no service description
+      drawSectionHeader(doc, 'SERVICE DESCRIPTION', margin, yPos, contentWidth);
+      yPos += 10;
       setColor(doc, COLORS.secondary, 'text');
       doc.setFontSize(9);
       doc.setFont('helvetica', 'italic');
       doc.text('No service description provided', margin + 5, yPos);
-      yPos += 15;
+      yPos += 25;
     }
     
-    // Check if we need a new page for the pricing table
+    // Ensure pricing starts on a fresh section (may already be on new page from service description)
     if (yPos > pageHeight - 100) {
       doc.addPage();
       yPos = 20;
