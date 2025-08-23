@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Purchase Order', margin, yPos);
-    yPos += 15;
+    yPos += 8; // Reduced gap from 15 to 8
     
     // Date and Purchase Order Number Information Bar
     setColor(doc, COLORS.background, 'fill');
