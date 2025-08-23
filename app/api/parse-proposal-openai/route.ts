@@ -17,8 +17,6 @@ const FIELD_SCHEMA = {
   onsite_contact_name: '',
   onsite_contact_phone: '',
   customer_phone: '',
-  customer_email: '',
-  billing_address: '',
   project_address: '',
   city: '',
   state: '',
