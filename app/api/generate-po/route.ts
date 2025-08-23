@@ -184,20 +184,16 @@ export async function POST(request: NextRequest) {
       doc.text('Website: www.tcsfloors.com', margin, yPos + 44);
     }
     
-    // Purchase Order Title and Number
-    const poBoxX = pageWidth - margin - 65;
-    setColor(doc, COLORS.accent, 'fill');
-    doc.rect(poBoxX, yPos, 65, 30, 'F');
-    setColor(doc, COLORS.white, 'text');
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('PURCHASE ORDER', poBoxX + 32.5, yPos + 10, { align: 'center' });
-    doc.setFontSize(14);
-    doc.text(fields.po_number || 'DRAFT', poBoxX + 32.5, yPos + 22, { align: 'center' });
-    
     yPos += 50;
     
-    // Date and Reference Information Bar
+    // Purchase Order Title (moved above date bar)
+    setColor(doc, COLORS.primary, 'text');
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Purchase Order', margin, yPos);
+    yPos += 15;
+    
+    // Date and Purchase Order Number Information Bar
     setColor(doc, COLORS.background, 'fill');
     doc.rect(margin, yPos, contentWidth, 25, 'F');
     setColor(doc, COLORS.border, 'draw');
@@ -211,13 +207,13 @@ export async function POST(request: NextRequest) {
     doc.setFont('helvetica', 'normal');
     doc.text('Date:', margin + 5, dateInfoY);
     doc.text('Service Date:', margin + 50, dateInfoY);
-    doc.text('Reference:', margin + 110, dateInfoY);
+    doc.text('Purchase Order Number:', margin + 110, dateInfoY);
     
     setColor(doc, COLORS.primary, 'text');
     doc.setFont('helvetica', 'bold');
     doc.text(fields.po_date || new Date().toLocaleDateString(), margin + 5, dateInfoY + 7);
     doc.text(fields.requested_service_date || 'TBD', margin + 50, dateInfoY + 7);
-    doc.text(fields.doc_reference || 'N/A', margin + 110, dateInfoY + 7);
+    doc.text(fields.po_number || 'DRAFT', margin + 110, dateInfoY + 7);
     
     yPos += 35;
     
