@@ -6,6 +6,7 @@ import { FileText, Brain, Search, CheckCircle, Loader2 } from 'lucide-react';
 
 interface ExtractionProgressProps {
   isVisible: boolean;
+  isCompleted?: boolean; // New prop to signal actual completion
   onComplete?: () => void;
 }
 
@@ -53,7 +54,7 @@ const progressStages: ProgressStage[] = [
   }
 ];
 
-export function ExtractionProgress({ isVisible, onComplete }: ExtractionProgressProps) {
+export function ExtractionProgress({ isVisible, isCompleted = false, onComplete }: ExtractionProgressProps) {
   const [currentStage, setCurrentStage] = useState(0);
   const [progress, setProgress] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -112,16 +113,13 @@ export function ExtractionProgress({ isVisible, onComplete }: ExtractionProgress
       setProgress(Math.min((elapsedTime / totalDuration) * 100, 100));
       setTimeRemaining(Math.max(totalDuration - elapsedTime, 0));
 
-      // Complete when done
+      // Don't auto-complete based on time - wait for actual completion signal
+      // Keep the progress realistic but don't finish until isCompleted prop is true
       if (elapsedTime >= totalDuration) {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        setTimeout(() => {
-          stableOnComplete();
-          hasStartedRef.current = false; // Reset for next time
-        }, 500);
+        // Stay at 95% until actually complete
+        elapsedTime = totalDuration * 0.95;
+        setProgress(95);
+        setCurrentStage(2); // Stay at "Data Extraction" stage
       }
     }, 100);
 
@@ -132,6 +130,28 @@ export function ExtractionProgress({ isVisible, onComplete }: ExtractionProgress
       }
     };
   }, [isVisible, stableOnComplete]);
+
+  // Handle actual completion when API finishes
+  useEffect(() => {
+    if (isCompleted && isVisible) {
+      // Clear any running interval
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      
+      // Move to completion state
+      setCurrentStage(3);
+      setProgress(100);
+      setTimeRemaining(0);
+      
+      // Call onComplete after a brief delay to show completion
+      setTimeout(() => {
+        stableOnComplete();
+        hasStartedRef.current = false;
+      }, 1000);
+    }
+  }, [isCompleted, isVisible, stableOnComplete]);
 
   if (!isVisible) return null;
 

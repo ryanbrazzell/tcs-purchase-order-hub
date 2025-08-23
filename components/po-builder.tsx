@@ -105,12 +105,14 @@ export function POBuilder() {
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
+  const [extractionCompleted, setExtractionCompleted] = useState(false);
   const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
   const [hasVoiceNote, setHasVoiceNote] = useState(false);
   
   // Stable callback for progress completion
   const handleProgressComplete = useCallback(() => {
     setShowProgress(false);
+    setExtractionCompleted(false); // Reset for next extraction
     if (fields) {
       toast.success('Data extracted successfully! Review the extracted data below.');
     }
@@ -192,6 +194,7 @@ export function POBuilder() {
     
     setIsUploading(true);
     setShowProgress(true);
+    setExtractionCompleted(false); // Reset completion state
     try {
       logger.info('Starting file upload', { name: file.name, size: file.size, type: file.type });
       
@@ -294,15 +297,10 @@ export function POBuilder() {
       
       setFields(cleanData);
       
-      // Show success message with additional context
-      let successMessage = 'PDF parsed successfully!';
-      if (_debug?.processing?.voiceProcessed) {
-        successMessage = 'PDF and voice note processed successfully!';
-      } else if (_debug?.processing?.voiceError) {
-        successMessage = 'PDF processed successfully! (Voice note failed but PDF extraction completed)';
-      }
+      // Signal that extraction is complete
+      setExtractionCompleted(true);
       
-      toast.success(successMessage);
+      // Note: Success message will be shown by handleProgressComplete
     } catch (error: any) {
       logger.error('Upload error', { 
         message: error.message,
@@ -336,9 +334,13 @@ export function POBuilder() {
       }
       
       toast.error(error.message || 'Failed to parse PDF');
+      
+      // Signal completion even on error so progress modal closes
+      setExtractionCompleted(true);
     } finally {
       setIsUploading(false);
-      setShowProgress(false);
+      // Don't hide progress here - let the completion handler do it
+      // setShowProgress(false); // Removed
     }
   };
 
@@ -619,6 +621,7 @@ export function POBuilder() {
       {/* Extraction Progress Modal */}
       <ExtractionProgress
         isVisible={showProgress}
+        isCompleted={extractionCompleted}
         onComplete={handleProgressComplete}
       />
     </div>
