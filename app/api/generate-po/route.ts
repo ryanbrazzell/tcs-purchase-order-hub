@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { getTCSLogoDataURI } from '../../../lib/logo-utils';
 
 declare module 'jspdf' {
   interface jsPDF {
@@ -128,20 +129,60 @@ export async function POST(request: NextRequest) {
     const contentWidth = pageWidth - (2 * margin);
     let yPos = 15;
     
-    // Professional Header with Company Information
-    // TCS Company Information
-    setColor(doc, COLORS.primary, 'text');
-    doc.setFontSize(26);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TCS FLOORS INC.', margin, yPos + 10);
-    
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    setColor(doc, COLORS.secondary, 'text');
-    doc.text('Total Cleaning Solutions', margin, yPos + 20);
-    doc.text('Professional Commercial Flooring Services', margin, yPos + 28);
-    doc.text('Phone: (866) 607-8659', margin, yPos + 36);
-    doc.text('Website: www.tcsfloors.com', margin, yPos + 44);
+    // Professional Header with TCS Floors Logo
+    try {
+      // Get TCS Floors logo as base64 data URI
+      const logoDataURI = getTCSLogoDataURI();
+      
+      if (logoDataURI) {
+        // Add the actual TCS Floors logo
+        doc.addImage(logoDataURI, 'PNG', margin, yPos, 45, 18); // width: 45, height: 18
+        
+        // Company information positioned next to logo
+        setColor(doc, COLORS.primary, 'text');
+        doc.setFontSize(22);
+        doc.setFont('helvetica', 'bold');
+        doc.text('TCS FLOORS INC.', margin + 50, yPos + 10);
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        setColor(doc, COLORS.secondary, 'text');
+        doc.text('Total Cleaning Solutions', margin + 50, yPos + 18);
+        doc.text('Professional Commercial Flooring Services', margin + 50, yPos + 26);
+        doc.text('Phone: (866) 607-8659', margin + 50, yPos + 34);
+        doc.text('Website: www.tcsfloors.com', margin + 50, yPos + 42);
+      } else {
+        // Fallback layout if logo fails to load
+        setColor(doc, COLORS.primary, 'text');
+        doc.setFontSize(26);
+        doc.setFont('helvetica', 'bold');
+        doc.text('TCS FLOORS INC.', margin, yPos + 10);
+        
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        setColor(doc, COLORS.secondary, 'text');
+        doc.text('Total Cleaning Solutions', margin, yPos + 20);
+        doc.text('Professional Commercial Flooring Services', margin, yPos + 28);
+        doc.text('Phone: (866) 607-8659', margin, yPos + 36);
+        doc.text('Website: www.tcsfloors.com', margin, yPos + 44);
+      }
+      
+    } catch (error) {
+      console.error('Logo loading failed:', error);
+      // Fallback to original layout
+      setColor(doc, COLORS.primary, 'text');
+      doc.setFontSize(26);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TCS FLOORS INC.', margin, yPos + 10);
+      
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      setColor(doc, COLORS.secondary, 'text');
+      doc.text('Total Cleaning Solutions', margin, yPos + 20);
+      doc.text('Professional Commercial Flooring Services', margin, yPos + 28);
+      doc.text('Phone: (866) 607-8659', margin, yPos + 36);
+      doc.text('Website: www.tcsfloors.com', margin, yPos + 44);
+    }
     
     // Purchase Order Title and Number
     const poBoxX = pageWidth - margin - 65;

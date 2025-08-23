@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PurchaseOrder, TAX_RATE } from '@/types';
+import { getTCSLogoDataURI } from './logo-utils';
 
 export async function generatePurchaseOrderPDF(data: PurchaseOrder): Promise<Blob> {
   const pdf = new jsPDF({
@@ -21,11 +22,34 @@ export async function generatePurchaseOrderPDF(data: PurchaseOrder): Promise<Blo
   
   let yPosition = marginTop;
 
-  // Header
-  pdf.setFontSize(24);
-  pdf.setTextColor(29, 78, 216); // TCS Blue
-  pdf.text('TCS PURCHASE ORDER', marginLeft, yPosition);
-  yPosition += 15;
+  // Header with TCS Logo
+  try {
+    const logoDataURI = getTCSLogoDataURI();
+    
+    if (logoDataURI) {
+      // Add TCS Floors logo
+      pdf.addImage(logoDataURI, 'PNG', marginLeft, yPosition, 40, 15);
+      
+      // Header text positioned next to logo
+      pdf.setFontSize(20);
+      pdf.setTextColor(29, 78, 216); // TCS Blue
+      pdf.text('TCS PURCHASE ORDER', marginLeft + 45, yPosition + 8);
+      yPosition += 20;
+    } else {
+      // Fallback header without logo
+      pdf.setFontSize(24);
+      pdf.setTextColor(29, 78, 216); // TCS Blue
+      pdf.text('TCS PURCHASE ORDER', marginLeft, yPosition);
+      yPosition += 15;
+    }
+  } catch (error) {
+    console.error('Logo loading failed in pdf-generator:', error);
+    // Fallback header without logo
+    pdf.setFontSize(24);
+    pdf.setTextColor(29, 78, 216); // TCS Blue
+    pdf.text('TCS PURCHASE ORDER', marginLeft, yPosition);
+    yPosition += 15;
+  }
 
   // PO Number and Date
   pdf.setFontSize(10);
