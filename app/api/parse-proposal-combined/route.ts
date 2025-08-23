@@ -271,25 +271,53 @@ VOICE ENHANCEMENT RULES:
 - Use voice to clarify ambiguous PDF content, but keep PDF data as the source of truth
 - If voice contradicts PDF, always use the PDF data` : ''}
 
+SPECIAL FOCUS: CUSTOMER SELECTION ANALYSIS
+This PDF likely contains multiple service package options or line items. Your job is to:
+
+1. IDENTIFY THE SELECTED OPTION(S): Look for checkmarks, highlighting, selected packages, or any indication of what the customer actually chose
+2. EXTRACT COMPLETE DETAILS: For the selected option(s), extract ALL specifications, not just the package name
+3. INCLUDE ADD-ONS: Look for any additional services, upgrades, or optional items that were selected
+4. BUILD COMPREHENSIVE DESCRIPTION: Combine the main selection with all add-ons into a detailed service_description
+
 EXTRACTION WORKFLOW:
-1. FIRST: Extract ALL data from the PDF document content above
-2. SECOND: Parse customer information, addresses, pricing, and specifications from PDF
-3. THIRD: Extract job details, timelines, and requirements from PDF
-${voiceTranscription ? `4. FINALLY: Use voice notes ONLY to enhance or add missing details that aren't in PDF` : ''}
+1. FIRST: Scan the entire PDF to understand the available service options/packages
+2. SECOND: Identify which specific option(s) the customer selected (look for indicators like checkmarks, circles, highlighting, "SELECTED", or pricing totals)
+3. THIRD: Extract complete details from the selected option including:
+   - Service type and specifications
+   - Materials to be used
+   - Scope of work details
+   - Square footage or coverage area
+   - Timeline requirements
+   - Any special procedures or requirements
+4. FOURTH: Look for additional selected add-ons, upgrades, or optional services
+5. FIFTH: Combine main selection + add-ons into comprehensive service_description
+6. SIXTH: Extract customer information, addresses, and other standard fields
+${voiceTranscription ? `7. FINALLY: Use voice notes ONLY to enhance or add missing details that aren't in PDF` : ''}
+
+SERVICE DESCRIPTION REQUIREMENTS:
+The service_description field should contain:
+- Complete details of the selected service package/option
+- All specifications from that selection (materials, procedures, coverage)
+- Any selected add-ons or upgrades with their details
+- Logistics requirements (timing, access, equipment)
+- Special instructions or requirements
+- Create comprehensive subcontractor work instructions based on the ACTUAL selection
 
 PRIMARY DATA EXTRACTION FROM PDF:
-1. Customer Information: Company name, contacts, phone numbers, addresses
-2. Job Site Details: Service address, city, state, ZIP code  
-3. Service Specifications: Floor type, square footage, service description
-4. Timeline: Requested dates, deadlines, scheduling requirements
-5. Pricing: Line items, costs, totals from PDF
-6. Special Requirements: Access needs, timing restrictions, material specifications
-7. Subcontractor Info: Company details if mentioned
+1. **CUSTOMER SELECTION IDENTIFICATION**: What specific service package/option did they choose?
+2. **SELECTED OPTION DETAILS**: All specifications, materials, procedures from that selection
+3. **ADD-ONS & UPGRADES**: Any additional services selected beyond the main package
+4. Customer Information: Company name, contacts, phone numbers, addresses
+5. Job Site Details: Service address, city, state, ZIP code  
+6. Timeline: Requested dates, deadlines, scheduling requirements from the SELECTED option
+7. Pricing: Line items, costs, totals for the SELECTED services only
+8. Special Requirements: Access needs, timing restrictions, material specifications from selection
+9. Subcontractor Info: Company details if mentioned
 
 Return ONLY valid JSON using this exact schema:
 ${JSON.stringify(FIELD_SCHEMA, null, 2)}
 
-REMEMBER: Extract primarily from PDF document content. Voice is supplementary enhancement only.`;
+REMEMBER: Focus on what the customer ACTUALLY SELECTED, not all available options. Extract complete details from their specific choice plus any add-ons.`;
 
       let completion;
       try {
@@ -300,7 +328,7 @@ REMEMBER: Extract primarily from PDF document content. Voice is supplementary en
           messages: [
             { 
               role: 'system', 
-              content: 'You are a floor service data extraction expert. Extract structured information from proposal documents and optional voice recordings to create detailed purchase orders. Return ONLY valid JSON with exact field names provided.' 
+              content: 'You are a floor service proposal analysis expert. Your specialty is identifying what customers actually SELECTED from multiple available options, then extracting complete details from their specific choice plus any add-ons. Focus on the customer\'s actual selection, not all available services. Return ONLY valid JSON with exact field names provided.' 
             },
             { 
               role: 'user', 
@@ -308,7 +336,7 @@ REMEMBER: Extract primarily from PDF document content. Voice is supplementary en
             }
           ],
           temperature: 0,
-          max_tokens: 1500,
+          max_tokens: 2500,
           response_format: { type: 'json_object' }
         });
         
