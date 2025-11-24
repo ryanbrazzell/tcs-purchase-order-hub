@@ -217,7 +217,24 @@ export function POBuilder() {
       
       // Read response as text first to debug
       const text = await response.text();
-      logger.info('Raw response', { text });
+      logger.info('Raw response', { text, status: response.status, statusText: response.statusText });
+      
+      // Check for HTML response (common with server errors/timeouts)
+      if (text.trim().toLowerCase().startsWith('<!doctype html') || text.trim().toLowerCase().startsWith('<html')) {
+        logger.error('Received HTML instead of JSON', { status: response.status });
+        
+        if (response.status === 504) {
+          throw new Error('Server timed out processing the PDF. Please try a smaller file or one with selectable text.');
+        }
+        if (response.status === 413) {
+          throw new Error('File too large. Please try a smaller PDF (under 10MB).');
+        }
+        if (response.status === 500) {
+          throw new Error('Server encountered an error. Please try again later.');
+        }
+        
+        throw new Error(`Server returned an invalid response (${response.status} ${response.statusText}).`);
+      }
       
       let data;
       try {

@@ -105,61 +105,34 @@ export async function POST(request: NextRequest) {
       
       let pdfContent = '';
       
-      // Variables for cleanup
-      let uploadedFile: any = null;
-      let assistant: any = null;
-      let thread: any = null;
-      
       try {
-        // Force pdf-parse to bypass debug mode by manipulating module context
-        console.log(`[${requestId}] Processing PDF via pdf-parse with debug mode override...`);
+        console.log(`[${requestId}] Processing PDF via pdf-parse...`);
         
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
         
+        // Use the same approach that works in deployed version - direct require to bypass debug mode
+        // This avoids the ENOENT error with test files
+        let parsed;
         try {
-          // Direct approach: Import pdf-parse library internals to bypass debug mode
-          const path = require('path');
-          const fs = require('fs');
-          
-          // Import the actual PDF parsing library directly from lib folder
+          // Try direct require first (works in Node.js/Next.js API routes)
           const pdfParseLib = require('pdf-parse/lib/pdf-parse.js');
-          
-          console.log(`[${requestId}] Using direct pdf-parse library import to avoid debug mode...`);
-          
-          const parsed = await pdfParseLib(buffer);
-          pdfContent = parsed.text || '';
-          
-          console.log(`[${requestId}] PDF parsed successfully via direct lib import:`, {
-            contentLength: pdfContent.length,
-            pages: parsed.numpages,
-            preview: pdfContent.substring(0, 200) + (pdfContent.length > 200 ? '...' : '')
-          });
-          
-        } catch (pdfParseError: any) {
-          console.warn(`[${requestId}] Direct pdf-parse failed, using basic text extraction:`, pdfParseError.message);
-          
-          // Final fallback: Return clear failure message so AI doesn't hallucinate
-          pdfContent = `[PDF_EXTRACTION_FAILED] Unable to extract text from "${file.name}". The PDF may be scanned, password-protected, or corrupted. Please provide a text-based PDF with selectable content.`;
-          
-          console.log(`[${requestId}] Using clear extraction failure message`);
+          parsed = await pdfParseLib(buffer);
+          console.log(`[${requestId}] PDF parsed successfully via direct require`);
+        } catch (requireError: any) {
+          // Fallback to dynamic import if require fails
+          console.log(`[${requestId}] Direct require failed, trying dynamic import:`, requireError.message);
+          const pdfParse = (await import('pdf-parse')).default;
+          parsed = await pdfParse(buffer);
+          console.log(`[${requestId}] PDF parsed successfully via dynamic import`);
         }
         
-        console.log(`[${requestId}] PDF content extraction completed:`, {
-          contentLength: pdfContent.length,
-          preview: pdfContent.substring(0, 200) + (pdfContent.length > 200 ? '...' : '')
-        });
+        pdfContent = parsed.text || '';
         
-        // Enhanced logging for debugging PDF content issues
-        console.log(`[${requestId}] PDF extraction success - Content preview:`, {
-          hasContent: pdfContent.length > 0,
-          startsWithExpected: pdfContent.toLowerCase().includes('tcs floor service') || pdfContent.toLowerCase().includes('customer information'),
-          containsKeywords: {
-            company: pdfContent.toLowerCase().includes('meridian') || pdfContent.toLowerCase().includes('business center'),
-            service: pdfContent.toLowerCase().includes('floor stripping') || pdfContent.toLowerCase().includes('waxing'),
-            pricing: pdfContent.toLowerCase().includes('$') || pdfContent.toLowerCase().includes('total'),
-            contact: pdfContent.toLowerCase().includes('sarah') || pdfContent.toLowerCase().includes('johnson')
-          }
+        console.log(`[${requestId}] PDF parsed successfully:`, {
+          contentLength: pdfContent.length,
+          pages: parsed.numpages,
+          preview: pdfContent.substring(0, 200) + (pdfContent.length > 200 ? '...' : '')
         });
         
         if (!pdfContent || pdfContent.trim().length < 10) {
@@ -171,7 +144,7 @@ export async function POST(request: NextRequest) {
               size: file.size,
               type: file.type
             },
-            extractionMethod: 'pdf-parse-direct'
+            extractionMethod: 'pdf-parse-dynamic-import'
           });
           return NextResponse.json({ 
             error: 'PDF content extraction failed - No readable text found',
@@ -186,19 +159,36 @@ export async function POST(request: NextRequest) {
           }, { status: 400 });
         }
         
+        // Enhanced logging for debugging
+        console.log(`[${requestId}] PDF extraction success - Content preview:`, {
+          hasContent: pdfContent.length > 0,
+          startsWithExpected: pdfContent.toLowerCase().includes('tcs floor service') || pdfContent.toLowerCase().includes('customer information'),
+          containsKeywords: {
+            company: pdfContent.toLowerCase().includes('meridian') || pdfContent.toLowerCase().includes('business center'),
+            service: pdfContent.toLowerCase().includes('floor stripping') || pdfContent.toLowerCase().includes('waxing'),
+            pricing: pdfContent.toLowerCase().includes('$') || pdfContent.toLowerCase().includes('total'),
+            contact: pdfContent.toLowerCase().includes('sarah') || pdfContent.toLowerCase().includes('johnson')
+          }
+        });
+
       } catch (pdfError: any) {
-        console.error(`[${requestId}] PDF processing failed:`, pdfError);
+        console.error(`[${requestId}] PDF processing failed:`, {
+          message: pdfError.message,
+          stack: pdfError.stack?.substring(0, 500),
+          name: pdfError.name,
+          code: pdfError.code
+        });
         return NextResponse.json({ 
           error: 'Failed to process PDF',
-          details: pdfError.message || 'The PDF file may be corrupted, password-protected, or in an unsupported format'
+          details: pdfError.message || 'The PDF file may be corrupted, password-protected, or in an unsupported format',
+          debugInfo: {
+            requestId,
+            errorType: pdfError.name,
+            errorCode: pdfError.code,
+            fileName: file.name,
+            fileSize: file.size
+          }
         }, { status: 400 });
-      } finally {
-        // Clean up OpenAI resources if used
-        if (uploadedFile && openai) {
-          openai.files.delete(uploadedFile.id).catch((err: any) => 
-            console.warn(`[${requestId}] Failed to delete file:`, err)
-          );
-        }
       }
       
       // Step 2: Process voice transcription if provided
