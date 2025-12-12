@@ -108,6 +108,7 @@ export function POBuilder() {
   const [extractionCompleted, setExtractionCompleted] = useState(false);
   const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null);
   const [hasVoiceNote, setHasVoiceNote] = useState(false);
+  const [voiceEnhancedFields, setVoiceEnhancedFields] = useState<string[]>([]);
   
   // Stable callback for progress completion
   const handleProgressComplete = useCallback(() => {
@@ -122,14 +123,14 @@ export function POBuilder() {
   const handleVoiceRecorded = useCallback((blob: Blob) => {
     setVoiceBlob(blob);
     setHasVoiceNote(true);
-    toast.success('Voice note recorded! Ready to extract with PDF.');
+    toast.success('Voice notes recorded! Ready to extract with PDF.');
   }, []);
 
   // Handle voice deletion
   const handleVoiceDeleted = useCallback(() => {
     setVoiceBlob(null);
     setHasVoiceNote(false);
-    toast.success('Voice note removed.');
+    toast.success('Voice notes removed.');
   }, []);
   
   // Calculate total from line items
@@ -303,8 +304,8 @@ export function POBuilder() {
         throw new Error(errorMessage);
       }
       
-      // Remove debug info from the fields before setting
-      const { _debug, ...cleanData } = data;
+      // Remove debug info and voice tracking from the fields before setting
+      const { _debug, _voice_enhanced, ...cleanData } = data;
       
       // Validate that we have a proper fields object
       if (!cleanData || typeof cleanData !== 'object' || Object.keys(cleanData).length === 0) {
@@ -312,10 +313,19 @@ export function POBuilder() {
         throw new Error('Invalid data received from server - no fields found');
       }
       
+      // Track which fields were enhanced by voice
+      if (_voice_enhanced && Array.isArray(_voice_enhanced)) {
+        setVoiceEnhancedFields(_voice_enhanced);
+        logger.info('Voice-enhanced fields detected', { fields: _voice_enhanced });
+      } else {
+        setVoiceEnhancedFields([]);
+      }
+      
       logger.info('Successfully parsed data', { 
         fieldsCount: Object.keys(cleanData).length,
         debugInfo: _debug,
-        hasVoiceProcessing: _debug?.processing?.voiceProcessed
+        hasVoiceProcessing: _debug?.processing?.voiceProcessed,
+        voiceEnhancedFields: _voice_enhanced
       });
       
       setFields(cleanData as POFields);
@@ -392,6 +402,7 @@ export function POBuilder() {
   const clearDraft = useCallback(() => {
     if (window.confirm('Are you sure you want to clear all fields?')) {
       setFields(null);
+      setVoiceEnhancedFields([]);
       localStorage.removeItem(DRAFT_STORAGE_KEY);
       toast.success('Draft cleared');
     }
@@ -480,6 +491,7 @@ export function POBuilder() {
                           setFields(null);
                           setExtractionCompleted(false);
                           setShowProgress(false);
+                          setVoiceEnhancedFields([]);
                         }
                       }}
                       className="sr-only"
@@ -504,16 +516,16 @@ export function POBuilder() {
             <div className="flex items-center justify-between">
               <div>
                 <label className="text-sm font-medium text-foreground block">
-                  Voice Note (Optional)
+                  Job Description Voice Notes (Optional)
                 </label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Add voice details for better context and more complete extraction
+                  Add job details, site access, scheduling, and special requirements to enhance the PDF extraction
                 </p>
               </div>
               {hasVoiceNote && (
                 <div className="flex items-center text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
                   <Mic className="w-4 h-4 mr-1" />
-                  Voice note ready
+                  Voice notes ready
                 </div>
               )}
             </div>
@@ -589,10 +601,21 @@ export function POBuilder() {
                     const isLineItemDesc = key.includes('line_item_') && key.includes('_desc');
                     const isPrice = key.includes('_price') || key === 'total';
                     
+                      const isVoiceEnhanced = voiceEnhancedFields.includes(key);
+                      
                       return (
                         <div key={key} className={`space-y-2 ${isFullWidth ? 'md:col-span-2' : ''} ${isLineItemDesc ? 'md:col-span-2 lg:col-span-1' : ''}`}>
-                          <Label htmlFor={key} className="text-sm font-medium">
+                          <Label htmlFor={key} className="text-sm font-medium flex items-center gap-2">
                             {fieldLabels[key]}
+                            {isVoiceEnhanced && (
+                              <span 
+                                className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full"
+                                title="Enhanced with voice notes"
+                              >
+                                <Mic className="w-3 h-3" />
+                                Voice
+                              </span>
+                            )}
                           </Label>
                           {isLargeField ? (
                             <Textarea

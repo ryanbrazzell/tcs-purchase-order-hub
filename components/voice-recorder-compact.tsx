@@ -93,7 +93,7 @@ export function VoiceRecorderCompact({
         streamRef.current = null;
       }
       
-      toast.success('Voice note recorded!');
+      toast.success('Voice notes recorded!');
     }
   }, [isRecording]);
 
@@ -133,7 +133,7 @@ export function VoiceRecorderCompact({
     }
     
     onRecordingDeleted();
-    toast.success('Voice note deleted');
+    toast.success('Voice notes deleted');
   }, [onRecordingDeleted]);
 
   // Format time display
@@ -189,7 +189,7 @@ export function VoiceRecorderCompact({
           className="bg-red-500 hover:bg-red-600 text-white"
         >
           <Mic className="w-4 h-4 mr-2" />
-          Record Note
+          Job Description Voice Notes
         </Button>
       )}
 
@@ -238,7 +238,7 @@ export function VoiceRecorderCompact({
       {/* Helper text */}
       {!isRecording && !recordedBlob && (
         <span className="text-xs text-muted-foreground">
-          Mention job details, special requirements, site logistics
+          Add job details, site access, contact info, timing, special requirements
         </span>
       )}
     </div>

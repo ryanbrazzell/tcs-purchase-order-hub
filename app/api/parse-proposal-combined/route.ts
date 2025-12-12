@@ -251,15 +251,31 @@ CRITICAL INSTRUCTION: The PDF document above is your PRIMARY and MAIN data sourc
 
 PDF CONTENT VALIDATION: This PDF content should contain floor service proposal information including customer details, service specifications, pricing, and contact information. If this content appears to be placeholder text or unrelated to floor services, return an error.
 
-${voiceTranscription ? `SUPPLEMENTARY VOICE CONTEXT (Use ONLY to enhance/clarify PDF data):
+${voiceTranscription ? `SUPPLEMENTARY VOICE CONTEXT (Use to ENHANCE and ADD DETAIL to PDF data):
 "${voiceTranscription}"
 
 VOICE ENHANCEMENT RULES:
-- PDF data takes ABSOLUTE PRIORITY - never override PDF information with voice data
-- Use voice ONLY to fill gaps where PDF has no information  
-- Use voice to add supplementary details to special_requirements or notes fields
-- Use voice to clarify ambiguous PDF content, but keep PDF data as the source of truth
-- If voice contradicts PDF, always use the PDF data` : ''}
+- PDF data takes ABSOLUTE PRIORITY for critical fields (customer name, company, addresses, pricing)
+- NEVER delete or replace critical PDF data with voice data
+- Voice should ADD to and ENRICH the data, not replace it
+
+PRIMARY VOICE ENHANCEMENT FOCUS - SERVICE DESCRIPTION:
+- The service_description field is the PRIMARY target for voice enhancement
+- APPEND voice details to the PDF's service description, don't replace it
+- Include: site access instructions, parking details, equipment notes, timing constraints, special handling
+- Include: observations from customer conversations, clarifications, additional context
+- Format: Start with PDF content, then add "ADDITIONAL NOTES FROM VOICE: " followed by voice details
+
+SECONDARY VOICE ENHANCEMENT FIELDS:
+- special_requirements: Add access codes, timing restrictions, site-specific notes
+- notes: Add general observations, context from conversations, helpful details
+- onsite_contact_name / onsite_contact_phone: Fill ONLY if empty in PDF
+- requested_service_date: Fill ONLY if empty in PDF
+
+VOICE-ENHANCED FIELD TRACKING:
+- In your response, include a "_voice_enhanced" array listing field names that were enhanced by voice data
+- Example: "_voice_enhanced": ["service_description", "special_requirements", "notes"]
+- Only include fields where voice actually added meaningful content` : ''}
 
 SPECIAL FOCUS: CUSTOMER SELECTION ANALYSIS
 This PDF likely contains multiple service package options or line items. Your job is to:
