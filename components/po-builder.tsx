@@ -306,13 +306,19 @@ export function POBuilder() {
       // Remove debug info from the fields before setting
       const { _debug, ...cleanData } = data;
       
+      // Validate that we have a proper fields object
+      if (!cleanData || typeof cleanData !== 'object' || Object.keys(cleanData).length === 0) {
+        logger.error('Invalid fields data received', { cleanData });
+        throw new Error('Invalid data received from server - no fields found');
+      }
+      
       logger.info('Successfully parsed data', { 
         fieldsCount: Object.keys(cleanData).length,
         debugInfo: _debug,
         hasVoiceProcessing: _debug?.processing?.voiceProcessed
       });
       
-      setFields(cleanData);
+      setFields(cleanData as POFields);
       
       // Signal that extraction is complete
       setExtractionCompleted(true);
@@ -392,7 +398,10 @@ export function POBuilder() {
   }, []);
 
   const handleGenerate = async () => {
-    if (!fields) return;
+    if (!fields) {
+      toast.error('Please extract data from a PDF first before generating a purchase order.');
+      return;
+    }
     
     setIsGenerating(true);
     try {
@@ -463,7 +472,16 @@ export function POBuilder() {
                       id="file-upload"
                       type="file"
                       accept="application/pdf"
-                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                      onChange={(e) => {
+                        const newFile = e.target.files?.[0] || null;
+                        setFile(newFile);
+                        // Clear old fields when a new file is selected
+                        if (newFile) {
+                          setFields(null);
+                          setExtractionCompleted(false);
+                          setShowProgress(false);
+                        }
+                      }}
                       className="sr-only"
                     />
                     <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
