@@ -320,8 +320,15 @@ PRIMARY DATA EXTRACTION FROM PDF:
 8. Special Requirements: Access needs, timing restrictions, material specifications from selection
 9. Subcontractor Info: Company details if mentioned
 
-Return ONLY valid JSON using this exact schema:
+Return ONLY valid JSON using this exact schema for the field data:
 ${JSON.stringify(FIELD_SCHEMA, null, 2)}
+
+${voiceTranscription ? `IMPORTANT - VOICE ENHANCEMENT TRACKING:
+In addition to the fields above, include a "_voice_enhanced" field as an array of strings.
+This array should list ONLY the field names that were enhanced or filled using voice data.
+Example: "_voice_enhanced": ["service_description", "special_requirements", "notes"]
+If no fields were enhanced by voice, include "_voice_enhanced": []
+` : ''}
 
 REMEMBER: Focus on what the customer ACTUALLY SELECTED, not all available options. Extract complete details from their specific choice plus any add-ons.`;
 
@@ -428,6 +435,16 @@ REMEMBER: Focus on what the customer ACTUALLY SELECTED, not all available option
         ? `${file.name} + Voice Recording`
         : file.name;
       
+      // Ensure _voice_enhanced is always a valid array
+      let voiceEnhanced: string[] = [];
+      if (extractedData._voice_enhanced) {
+        if (Array.isArray(extractedData._voice_enhanced)) {
+          voiceEnhanced = extractedData._voice_enhanced.filter((field: any) => typeof field === 'string');
+        }
+      }
+      // Remove _voice_enhanced from result if it exists (we'll add it back to response separately)
+      delete result._voice_enhanced;
+      
       console.log(`[${requestId}] Combined extraction completed successfully:`, {
         pdfName: file.name,
         pdfSize: file.size,
@@ -456,6 +473,7 @@ REMEMBER: Focus on what the customer ACTUALLY SELECTED, not all available option
       // Include enhanced debug information in response for troubleshooting
       const response = {
         ...result,
+        _voice_enhanced: voiceEnhanced, // Always include as array, even if empty
         _debug: {
           requestId,
           processing: {
@@ -464,7 +482,8 @@ REMEMBER: Focus on what the customer ACTUALLY SELECTED, not all available option
             voiceProcessed: !!voiceTranscription,
             voiceError: voiceProcessingError,
             fieldsExtracted: Object.keys(extractedData).length,
-            totalFields: Object.keys(result).length
+            totalFields: Object.keys(result).length,
+            voiceEnhancedFieldsCount: voiceEnhanced.length
           },
           pdfExtraction: {
             fileName: file.name,
