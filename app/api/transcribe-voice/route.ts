@@ -163,7 +163,14 @@ Extract from the voice transcription above:`;
       
       let extractedData;
       try {
-        extractedData = JSON.parse(responseContent);
+        // Clean up response content - strip markdown code blocks if present
+        let cleanContent = responseContent.trim();
+        const markdownMatch = cleanContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (markdownMatch) {
+          cleanContent = markdownMatch[1];
+        }
+        
+        extractedData = JSON.parse(cleanContent);
         console.log('Successfully parsed extraction data', { keys: Object.keys(extractedData) });
       } catch (parseError: any) {
         console.error('JSON parse error:', parseError);

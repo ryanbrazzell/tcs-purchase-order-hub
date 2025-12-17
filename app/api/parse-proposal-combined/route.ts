@@ -404,7 +404,15 @@ REMEMBER: Focus on what the customer ACTUALLY SELECTED, not all available option
       
       let extractedData;
       try {
-        extractedData = JSON.parse(responseContent);
+        // Clean up response content - strip markdown code blocks if present
+        let cleanContent = responseContent.trim();
+        // Remove ```json ... ``` or ``` ... ``` wrappers
+        const markdownMatch = cleanContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (markdownMatch) {
+          cleanContent = markdownMatch[1];
+        }
+        
+        extractedData = JSON.parse(cleanContent);
         console.log(`[${requestId}] Successfully parsed extraction data:`, { 
           keys: Object.keys(extractedData),
           keyCount: Object.keys(extractedData).length,
